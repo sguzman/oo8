@@ -31,11 +31,18 @@ jobs:
             -p oo7-cli \
             -p git-credential-oo7 \
             -p cargo-credential-oo7
-      - name: Test standalone daemon with disposable encrypted keyrings
+      - name: Test daemon as an unprivileged desktop user
         env:
           OO8_STARTUP_ITERATIONS: '12'
         run: |
-          bash tests/oo8-startup-race.sh unused target/release/oo7-daemon
+          # The runtime daemon is a systemd *user* service. Running it as
+          # root inside an unprivileged CI container incorrectly takes the
+          # privileged capability-drop path and fails with EPERM.
+          useradd --create-home --shell /bin/bash oo8ci
+          runuser -u oo8ci -- env \
+            OO8_STARTUP_ITERATIONS="$OO8_STARTUP_ITERATIONS" \
+            bash "$GITHUB_WORKSPACE/tests/oo8-startup-race.sh" \
+            unused "$GITHUB_WORKSPACE/target/release/oo7-daemon"
       - name: Assemble Soar release archive
         run: |
           set -euo pipefail
