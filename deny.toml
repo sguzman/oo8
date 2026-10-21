@@ -5,6 +5,12 @@ targets = [
 ]
 
 [advisories]
+# Deny all known vulnerabilities. Until upstream ashpd supports zbus 6,
+# check unmaintained crates when directly selected by this workspace.
+# Transitive zvariant/zbus_names deprecations from zbus 5 remain a tracked
+# compatibility migration; they are not known security vulnerabilities.
+# Ref: https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
+unmaintained = "workspace"
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 ignore = []
