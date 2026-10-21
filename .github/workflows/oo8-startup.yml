@@ -1,0 +1,28 @@
+name: oo8 isolated startup regression
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  startup-race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install private D-Bus test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus dbus-bin
+      - name: Build oo7-compatible daemon from oo8
+        run: cargo build --locked -p oo7-daemon
+      - name: Exercise startup and systemd credential import in isolation
+        env:
+          OO8_STARTUP_ITERATIONS: "12"
+        run: timeout 120s bash tests/oo8-startup-race.sh
