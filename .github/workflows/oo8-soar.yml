@@ -48,6 +48,11 @@ jobs:
           runuser -u oo8ci -- bash "$GITHUB_WORKSPACE/tests/oo8-keyring-lifecycle.sh" \
             "$GITHUB_WORKSPACE/target/release/oo7-daemon" \
             "$GITHUB_WORKSPACE/target/release/oo7-cli"
+      - name: Verify no implicit D-Bus takeover using packaged executables
+        run: |
+          runuser -u oo8ci -- bash "$GITHUB_WORKSPACE/tests/oo8-dbus-ownership.sh" \
+            "$GITHUB_WORKSPACE/target/release/oo7-daemon" \
+            "$GITHUB_WORKSPACE/target/release/oo7-cli"
       - name: Assemble Soar release archive
         run: |
           set -euo pipefail
