@@ -13,7 +13,10 @@ Restart=on-failure
 TimeoutStartSec=30s
 TimeoutStopSec=30s
 ImportCredential=oo7.keyring-encryption-password
+StandardError=journal
 NoNewPrivileges=true
+SupplementaryGroups=
+PrivateUsers=yes
 ProtectSystem=full
 PrivateTmp=true
 PrivateDevices=true
@@ -21,6 +24,7 @@ PrivateNetwork=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
+MemoryDenyWriteExecute=true
 ProtectClock=true
 
 [Install]
