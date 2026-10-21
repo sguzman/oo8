@@ -1,0 +1,64 @@
+name: oo8 historical daemon comparison
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/oo8-historical-repro.yml
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install isolated D-Bus test tools and old oo7 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus dbus-bin pkg-config libssl-dev gettext
+      - name: Build affected oo7-daemon 0.6.0 from published crates.io source
+        run: |
+          # Historical baseline: oo7 0.6.0 is the upstream source version of
+          # the previously installed Arch oo7 0.6.0-5 package. The distro
+          # packaging and exact historical binaries are not reproduced here.
+          cargo install --version 0.6.0 --locked oo7-daemon --root "$RUNNER_TEMP/oo7-old"
+          "$RUNNER_TEMP/oo7-old/bin/oo7-daemon" --version
+      - name: Build current oo8 daemon
+        run: cargo build --locked -p oo7-daemon
+      - name: Compare startup under identical isolated regression harness
+        env:
+          OO8_STARTUP_ITERATIONS: '50'
+        run: |
+          set -euo pipefail
+          mkdir -p historical-results
+          # The old race is timing-dependent. A failure with a panic is
+          # evidence of reproduction, not an expected assertion.
+          set +e
+          timeout 180s bash tests/oo8-startup-race.sh unused \
+            "$RUNNER_TEMP/oo7-old/bin/oo7-daemon" \
+            > historical-results/oo7-0.6.0.log 2>&1
+          old_status=$?
+          set -e
+          if grep -Eiq "panicked at|thread .* panicked|called .*unwrap" historical-results/oo7-0.6.0.log; then
+            echo "Old oo7 0.6.0 reproduced a daemon panic" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Old oo7 0.6.0: no panic reproduced in this finite run (exit $old_status)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "Historical executable status: $old_status" >> "$GITHUB_STEP_SUMMARY"
+          # Current oo8 MUST pass the exact same test.
+          timeout 180s bash tests/oo8-startup-race.sh unused \
+            target/debug/oo7-daemon > historical-results/oo8-main.log 2>&1
+          echo "Current oo8: 50 isolated startup runs passed" >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve reproduction diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-oo7-comparison
+          path: historical-results/
+          if-no-files-found: warn
+          retention-days: 14
