@@ -7,7 +7,7 @@ oo8 is an independently maintained fork of [linux-credentials/oo7](https://githu
 - Prevent the daemon from claiming `org.freedesktop.secrets` until its internal connection and collections are initialized.
 - Confirm a disposable `oo7.keyring-encryption-password` provided through `CREDENTIALS_DIRECTORY` unlocks the default keyring under a passwordless desktop login model.
 - Treat a panic in any service worker as a regression, even if the process remains running.
-- Maintain an independent Arch package for the complete service, PAM module, portal, and helpers.
+- Maintain an independent Arch package for the complete service, PAM module, portal, and helpers, published directly as assets on GitHub Releases (no separate pacman repository).
 - Continue to incorporate upstream security and compatibility updates. `credentialsd` and `libwebauthn` are separate projects, not oo8 dependencies.
 
 ## Safety gates before local installation
@@ -18,6 +18,7 @@ oo8 is an independently maintained fork of [linux-credentials/oo7](https://githu
 4. Back up encrypted keyring files and record existing package and service state before any replacement.
 5. Verify replacement and rollback paths; no deletion of original encrypted keyrings, Edge profiles, or systemd credentials.
 6. Package installation remains an explicit separate action; successful CI never automatically updates a user's machine.
+7. Only version tags in the form `v0.7.0.oo8.1` trigger publication to GitHub Releases; ordinary commits create temporary CI artifacts, not releases. A tagged package must pass manifest checks and the isolated startup regression first.
 
 ### Regression gate
 
