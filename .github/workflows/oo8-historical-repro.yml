@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/oo8-historical-repro.yml
+      - tests/oo8-startup-race.sh
 
 permissions:
   contents: read
@@ -39,7 +40,7 @@ jobs:
           # The old race is timing-dependent. A failure with a panic is
           # evidence of reproduction, not an expected assertion.
           set +e
-          timeout 180s bash tests/oo8-startup-race.sh unused \
+          OO8_EXPECT_UNLOCKED=0 timeout 180s bash tests/oo8-startup-race.sh unused \
             "$RUNNER_TEMP/oo7-old/bin/oo7-daemon" \
             > historical-results/oo7-0.6.0.log 2>&1
           old_status=$?
