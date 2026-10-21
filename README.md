@@ -7,7 +7,10 @@ oo8 is an independently maintained fork of [oo7](https://github.com/linux-creden
 - [Maintenance and safe rollout](OO8.md)
 - [Isolated D-Bus startup regression](tests/oo8-startup-race.sh)
 - [Arch package recipe](packaging/arch/PKGBUILD)
+- [GitHub Releases (direct .pkg.tar.zst downloads)](https://github.com/sguzman/oo8/releases)
 - [Arch staging CI](.github/workflows/oo8-arch.yml)
+
+Arch packages are attached directly to **this repository's GitHub Releases** when an oo8 version tag is pushed; no separate pacman repository or AUR package is required. Releases include a SHA-256 checksum. A package can be installed manually with `pacman -U` once validated. GitHub Releases do not automatically participate in `yay -Syu` without an additional update mechanism.
 
 The staging package conflicts with Arch's oo7 package and is **never installed automatically** by CI. Replacing a live keyring service requires a separately validated rollout with backups and rollback.
 
