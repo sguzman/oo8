@@ -1,0 +1,31 @@
+# One-time per-user service, to be installed as
+# ~/.config/systemd/user/oo7-daemon.service
+# This shadows Arch's vendor unit without modifying /usr/lib.
+# No PAM change and no changes to your keyring files.
+[Unit]
+Description=Secret Service (oo8, Cargo-managed)
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.secrets
+ExecStart=%h/.cargo/bin/oo7-daemon
+Restart=on-failure
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+ImportCredential=oo7.keyring-encryption-password
+StandardError=journal
+NoNewPrivileges=true
+SupplementaryGroups=
+PrivateUsers=yes
+ProtectSystem=full
+PrivateTmp=true
+PrivateDevices=true
+PrivateNetwork=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+MemoryDenyWriteExecute=true
+ProtectClock=true
+
+[Install]
+WantedBy=default.target
