@@ -43,13 +43,13 @@ printf '%s' 'oo8-disposable-ownership-password' \
     > "$case_dir/credentials/oo7.keyring-encryption-password"
 chmod 600 "$case_dir/credentials/oo7.keyring-encryption-password"
 
-# Keep each candidate's PAM socket inside the disposable directory so a
-# second process cannot interfere with the first daemon's listener.
+# Deliberately share the exact PAM socket pathname across all attempts:
+# duplicate startup must never unlink the live owner's listener.
 launch() {
     local label="$1"
     XDG_DATA_HOME="$case_dir/data" \
     CREDENTIALS_DIRECTORY="$case_dir/credentials" \
-    OO7_PAM_SOCKET="$case_dir/$label-pam.sock" \
+    OO7_PAM_SOCKET="$case_dir/pam.sock" \
         "$daemon" > "$case_dir/$label.log" 2>&1 &
     launched_pid=$!
 }
@@ -85,6 +85,8 @@ launch "primary"
 first_pid="$launched_pid"
 first_owner="$(wait_ready "$first_pid")"
 [[ -n "$first_owner" ]] || fail "primary owner missing"
+[[ -S "$case_dir/pam.sock" ]] || fail "primary PAM socket missing"
+original_socket="$(stat -Lc '%d:%i' "$case_dir/pam.sock")"
 attribute="oo8-owner-test=$(basename "$case_dir")"
 secret="oo8-disposable-secret"
 printf '%s\n' "$secret" | "$cli" store "oo8 ownership test" "$attribute" \
@@ -97,7 +99,7 @@ printf '%s\n' "$secret" | "$cli" store "oo8 ownership test" "$attribute" \
 set +e
 XDG_DATA_HOME="$case_dir/data" \
 CREDENTIALS_DIRECTORY="$case_dir/credentials" \
-OO7_PAM_SOCKET="$case_dir/contender-pam.sock" \
+OO7_PAM_SOCKET="$case_dir/pam.sock" \
     timeout 12s "$daemon" > "$case_dir/contender.log" 2>&1
 contender_status=$?
 set -e
@@ -108,6 +110,9 @@ grep -q "There is an instance already running" "$case_dir/contender.log" \
 [[ "$(owner)" == "$first_owner" ]] \
     || fail "contender displaced the active Secret Service"
 kill -0 "$first_pid" 2>/dev/null || fail "primary daemon died after contested startup"
+[[ -S "$case_dir/pam.sock" ]] || fail "contender removed primary PAM socket"
+[[ "$(stat -Lc '%d:%i' "$case_dir/pam.sock")" == "$original_socket" ]] \
+    || fail "contender replaced the live primary PAM socket"
 [[ "$("$cli" lookup --secret-only "$attribute")" == "$secret" ]] \
     || fail "contender damaged an existing secret"
 
@@ -118,6 +123,7 @@ first_pid=""
 launch "successor"
 successor_pid="$launched_pid"
 new_owner="$(wait_ready "$successor_pid")"
+[[ -S "$case_dir/pam.sock" ]] || fail "successor failed to recover stale PAM socket"
 [[ -n "$new_owner" && "$new_owner" != "$first_owner" ]] \
     || fail "successor did not acquire a fresh D-Bus owner"
 [[ "$("$cli" lookup --secret-only "$attribute")" == "$secret" ]] \
@@ -127,4 +133,4 @@ for log in "$case_dir"/*.log; do
         fail "a daemon logged a panic during ownership transition"
     fi
 done
-echo "PASS: contender rejected without replacement, original owner survived, clean handoff preserved secret"
+echo "PASS: contender rejected, live PAM socket preserved, stale socket recovered, handoff retained secret"
