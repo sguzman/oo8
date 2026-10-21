@@ -68,6 +68,15 @@ dump_failure() {
 }
 fail() { echo "FAIL: $*" >&2; dump_failure; exit 1; }
 
+# GitHub's Ubuntu runner can put the *runner* XDG_RUNTIME_DIR in
+# /etc/environment, even for another PAM user session. Override the manager
+# environment before launching the disposable service; otherwise zbus tries
+# /run/user/1001/bus instead of this user's own bus.
+as_user systemctl --user set-environment \
+    "XDG_RUNTIME_DIR=/run/user/$uid" \
+    "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus" \
+    "HOME=/home/$user"
+
 # Run the real binary through the disposable user's systemd manager.
 # LoadCredential creates CREDENTIALS_DIRECTORY automatically and passes the
 # named credential securely into the service's per-unit credential directory.
