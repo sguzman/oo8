@@ -1,0 +1,48 @@
+name: oo8 Arch package
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare Arch build environment
+        run: |
+          pacman -Syu --noconfirm --needed git meson ninja pkgconf rust sudo
+          useradd -m -s /bin/bash builder
+          printf 'builder ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/oo8-builder
+          chmod 0440 /etc/sudoers.d/oo8-builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+      - name: Pin package input to exactly this commit
+        run: |
+          sed -i "s|#branch=main|#commit=${GITHUB_SHA}|g" packaging/arch/PKGBUILD
+          grep -F "#commit=${GITHUB_SHA}" packaging/arch/PKGBUILD
+      - name: Build package as non-root user
+        run: |
+          su builder -s /bin/bash -c "cd '$GITHUB_WORKSPACE/packaging/arch' && makepkg --syncdeps --noconfirm --cleanbuild"
+      - name: Inspect package file manifest
+        run: |
+          set -eu
+          pkg="$(find packaging/arch -maxdepth 1 -type f -name 'oo8-*.pkg.tar.zst' -print -quit)"
+          test -n "$pkg"
+          pacman -Qp "$pkg"
+          pacman -Qlp "$pkg" > /tmp/oo8-package-manifest.txt
+          for path in usr/lib/oo7-daemon usr/lib/oo7-daemon-login usr/lib/oo7-portal usr/lib/security/pam_oo7.so usr/bin/oo7-cli usr/lib/systemd/user/oo7-daemon.service; do
+            grep -Fq "$path" /tmp/oo8-package-manifest.txt
+          done
+      - name: Save staging package (never install automatically)
+        uses: actions/upload-artifact@v4
+        with:
+          name: oo8-arch-package-${{ github.sha }}
+          path: packaging/arch/oo8-*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 14
