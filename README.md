@@ -4,6 +4,20 @@ oo8 is an independently maintained fork of [oo7](https://github.com/linux-creden
 
 **Status: development.** The live desktop must not be switched over until a fully tested standalone release exists. Existing encrypted keyrings, systemd credentials, and upstream MIT attribution are preserved.
 
+## Canonical installation, updates, and service management
+
+**oo8 is distributed from this GitHub repository through GitHub Releases and managed on Linux with Soar.** This is the expected install and update workflow, not an optional alternative to pacman.
+
+1. **Install (once):** After the initial tested release, register oo8 with Soar using the [Soar package declaration](packaging/soar/packages.toml). Soar downloads and manages the released executables.
+2. **Configure systemd (once):** Install the [user-service unit](packaging/soar/oo7-daemon.service) and reload/enable it. It must target a stable Soar-managed executable link and preserve `org.freedesktop.secrets` plus the existing `oo7.keyring-encryption-password` credential.
+3. **Publish new versions:** Develop on `main`; version tags publish tested GitHub Releases. Routine commits alone are not installed releases.
+4. **Update:** Run `soar update`. New releases replace the managed executables without editing the user-service unit or Soar declaration. The running daemon takes the new executable after the next service restart/login.
+5. **Maintain:** Keep upstream oo7 compatibility, encrypted keyrings, release validation, and rollback instructions. System-installed PAM modules and desktop portal registration are separately managed; Soar does not install those privileged/system integration files.
+
+**No pacman repository registration, PKGBUILD updates, AUR publishing, or extra GitHub repository is required for oo8's normal release/install/update lifecycle.** Do not swap the live daemon until the initial Soar release, command paths, and safe rollback procedure have been verified. The setup templates are a rollout plan, not evidence that the machine is already migrated.
+
+Full procedure: [Soar and systemd setup](packaging/soar/README.md).
+
 - [One-time Soar + user-service setup](packaging/soar/README.md)
 - [Soar declarative package fragment](packaging/soar/packages.toml)
 - [User service template](packaging/soar/oo7-daemon.service)
