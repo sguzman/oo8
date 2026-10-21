@@ -1,0 +1,97 @@
+name: oo8 Soar release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install build and private D-Bus dependencies
+        run: |
+          pacman -Syu --noconfirm --needed rust git pkgconf dbus gettext openssl
+      - name: Build portable user-space executables
+        run: |
+          cargo build --locked --release \
+            -p oo7-daemon \
+            -p oo7-portal \
+            -p oo7-cli \
+            -p git-credential-oo7 \
+            -p cargo-credential-oo7
+      - name: Test standalone daemon with disposable encrypted keyrings
+        env:
+          OO8_STARTUP_ITERATIONS: '12'
+        run: |
+          bash tests/oo8-startup-race.sh unused target/release/oo7-daemon
+      - name: Assemble Soar release archive
+        run: |
+          set -euo pipefail
+          mkdir -p dist/archive/bin
+          for name in oo7-daemon oo7-daemon-login oo7-portal oo7-cli git-credential-oo7 cargo-credential-oo7; do
+            test -x "target/release/$name"
+            install -m755 "target/release/$name" "dist/archive/bin/$name"
+          done
+          install -m644 LICENSE dist/archive/LICENSE
+          cd dist/archive
+          tar -czf ../oo8-x86_64-linux.tar.gz bin LICENSE
+          cd ..
+          tar -tzf oo8-x86_64-linux.tar.gz | grep -Fx 'bin/oo7-daemon'
+          tar -tzf oo8-x86_64-linux.tar.gz | grep -Fx 'bin/oo7-portal'
+          sha256sum oo8-x86_64-linux.tar.gz > oo8-x86_64-linux.tar.gz.sha256
+      - name: Save development archive for review
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oo8-soar-${{ github.sha }}
+          path: |
+            dist/oo8-x86_64-linux.tar.gz
+            dist/oo8-x86_64-linux.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Attach tested archive to draft GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          generate_release_notes: true
+          prerelease: false
+          make_latest: false
+          fail_on_unmatched_files: true
+          files: |
+            dist/oo8-x86_64-linux.tar.gz
+            dist/oo8-x86_64-linux.tar.gz.sha256
+      - name: Publish complete release for Soar
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = context.ref.replace('refs/tags/', '');
+            const {data: release} = await github.rest.repos.getReleaseByTag({owner, repo, tag});
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner, repo, release_id: release.id, per_page: 100
+            });
+            const expected = ['oo8-x86_64-linux.tar.gz', 'oo8-x86_64-linux.tar.gz.sha256'];
+            for (const name of expected) {
+              if (!assets.some(a => a.name === name && a.size > 0)) {
+                throw new Error('Missing or empty release asset: ' + name);
+              }
+            }
+            await github.rest.repos.updateRelease({
+              owner, repo, release_id: release.id,
+              draft: false, prerelease: false, make_latest: 'true'
+            });
