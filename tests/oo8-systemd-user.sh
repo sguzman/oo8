@@ -33,7 +33,13 @@ trap cleanup EXIT
 useradd --create-home --shell /bin/bash "$user"
 uid="$(id -u "$user")"
 data="/home/$user/oo8-test"
-install -d -m 0700 -o "$user" -g "$user" "$data" "$data/data" "$data/credentials"
+install -d -m 0700 -o "$user" -g "$user" "$data" "$data/data" "$data/credentials" "$data/bin"
+# GitHub runner's workspace is not traversable by another account. Copy the
+# exact just-built executables into the throwaway account, preserving versions.
+install -m 0755 -o "$user" -g "$user" "$daemon" "$data/bin/oo7-daemon"
+install -m 0755 -o "$user" -g "$user" "$cli" "$data/bin/oo7-cli"
+daemon="$data/bin/oo7-daemon"
+cli="$data/bin/oo7-cli"
 credential="$data/credentials/oo7.keyring-encryption-password"
 secret="oo8-ci-systemd-disposable-secret"
 attr="oo8-systemd-test=${GITHUB_RUN_ID:-local}"
