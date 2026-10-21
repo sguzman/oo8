@@ -84,8 +84,13 @@ for ((run = 1; run <= iterations; run++)); do
         string:org.freedesktop.Secret.Collection string:Locked)" \
         || fail "default collection lock-state query failed, iteration $run"
 
-    [[ "$locked_reply" == *"boolean false"* ]] \
-        || fail "disposable systemd credential did not unlock default collection, iteration $run"
+    # The 0.6.0 historical baseline creates a locked collection even when
+    # supplied a credential. Its race probe needs to check bus readiness and
+    # panic logs independently of that separate lock-state behavior.
+    if [[ "${OO8_EXPECT_UNLOCKED:-1}" == 1 ]]; then
+        [[ "$locked_reply" == *"boolean false"* ]] \
+            || fail "disposable systemd credential did not unlock default collection, iteration $run"
+    fi
 
     if grep -Eq "panicked at|thread .* panicked|called .*unwrap" "$case_dir/daemon.log"; then
         fail "daemon logged a panic, iteration $run"
