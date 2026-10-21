@@ -25,9 +25,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y dbus dbus-bin
-      - name: Build oo7-compatible daemon from oo8
-        run: cargo build --locked -p oo7-daemon
+      - name: Build oo7-compatible daemon and CLI from oo8
+        run: cargo build --locked -p oo7-daemon -p oo7-cli
       - name: Exercise startup and systemd credential import in isolation
         env:
           OO8_STARTUP_ITERATIONS: "12"
         run: timeout 120s bash tests/oo8-startup-race.sh
+      - name: Exercise persistent keyrings, incorrect credentials and recovery
+        run: timeout 120s bash tests/oo8-keyring-lifecycle.sh
