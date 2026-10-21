@@ -155,9 +155,12 @@ async fn inner_main(args: Args) -> Result<(), Error> {
 
     let connection = match Service::run(secret, args.replace).await {
         Ok(connection) => connection,
-        Err(Error::File(oo7::file::Error::IncorrectSecret)) if !args.login => {
-            tracing::warn!("Failed to unlock session keyring: credential contains wrong password");
-            return Ok(());
+        Err(err @ Error::File(oo7::file::Error::IncorrectSecret)) if !args.login => {
+            // A failed daemon startup must not be reported as a successful
+            // systemd service exit. The collection-loading path normally
+            // keeps an existing keyring locked when its password is wrong.
+            tracing::error!("Daemon startup failed: supplied keyring secret was rejected");
+            return Err(err);
         }
         Err(Error::Zbus(zbus::Error::NameTaken)) if !args.replace => {
             tracing::error!(
