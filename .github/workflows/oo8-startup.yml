@@ -33,3 +33,7 @@ jobs:
         run: timeout 120s bash tests/oo8-startup-race.sh
       - name: Exercise persistent keyrings, incorrect credentials and recovery
         run: timeout 120s bash tests/oo8-keyring-lifecycle.sh
+      - name: Exercise real systemd user service and LoadCredential
+        run: |
+          sudo timeout 120s bash tests/oo8-systemd-user.sh \
+            "$PWD/target/debug/oo7-daemon" "$PWD/target/debug/oo7-cli"
