@@ -2,17 +2,19 @@
 
 oo8 is an independently maintained fork of [oo7](https://github.com/linux-credentials/oo7), a Linux [Secret Service](https://specifications.freedesktop.org/secret-service-spec/latest/) provider.
 
-**Status:** development. Do not replace a working system keyring using an unvalidated build. This fork preserves oo7's storage formats, service identifiers, binaries, and MIT license while adding independent reliability checks and Arch packaging.
+**Status: development.** The live desktop must not be switched over until a fully tested standalone release exists. Existing encrypted keyrings, systemd credentials, and upstream MIT attribution are preserved.
 
-- [Maintenance and safe rollout](OO8.md)
-- [Isolated D-Bus startup regression](tests/oo8-startup-race.sh)
-- [Arch package recipe](packaging/arch/PKGBUILD)
-- [GitHub Releases (direct .pkg.tar.zst downloads)](https://github.com/sguzman/oo8/releases)
-- [Arch staging CI](.github/workflows/oo8-arch.yml)
+- [One-time Soar + user-service setup](packaging/soar/README.md)
+- [Soar declarative package fragment](packaging/soar/packages.toml)
+- [User service template](packaging/soar/oo7-daemon.service)
+- [Independent GitHub release builder](.github/workflows/oo8-soar.yml)
+- [Reproducible isolated D-Bus startup regression](tests/oo8-startup-race.sh)
+- [Maintenance and rollout policy](OO8.md)
+- [Download releases](https://github.com/sguzman/oo8/releases)
 
-Arch packages and the `oo8.db` pacman database are attached directly to **this repository's GitHub Releases** when an oo8 version tag is pushed; no additional GitHub repository, AUR submission, or updater application is required. GitHub Releases can serve as a native pacman repository through the stable `/releases/latest/download` address. After one-time pacman configuration and installation, normal `yay -Syu` downloads updates automatically during system upgrades. **Do not configure or install this staging package until the release verification and signing requirements are satisfied.** See [Arch automatic-upgrade instructions](packaging/arch/README.md).
+**Distribution:** GitHub Releases -> Soar -> fixed user-service executable link. Soar tracks and updates released binaries through `soar update`; no pacman registration, manually maintained PKGBUILD, separate GitHub repo, or repeated systemd edits. A running daemon uses the new executable after the next service restart/login.
 
-The staging package conflicts with Arch's oo7 package and is **never installed automatically** by CI. Replacing a live keyring service requires a separately validated rollout with backups and rollback.
+Soar does not manage PAM modules or desktop portal registration. The first rollout focuses on the user daemon and existing systemd encrypted-credential unlock. Other integration is explicitly a separate tested milestone.
 
 ---
 
