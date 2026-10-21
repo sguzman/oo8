@@ -48,7 +48,7 @@ jobs:
           done
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             expected="${GITHUB_REF_NAME#v}"
-            [[ "$expected" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+(\\.[[:alnum:]]+)*$ ]] || {
+            [[ "$expected" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[[:alnum:]]+)*$ ]] || {
               echo "Release tag must look like v0.7.0.oo8.1" >&2
               exit 1
             }
