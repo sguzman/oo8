@@ -7,18 +7,19 @@ oo8 is an independently maintained fork of [linux-credentials/oo7](https://githu
 - Prevent the daemon from claiming `org.freedesktop.secrets` until its internal connection and collections are initialized.
 - Confirm a disposable `oo7.keyring-encryption-password` provided through `CREDENTIALS_DIRECTORY` unlocks the default keyring under a passwordless desktop login model.
 - Treat a panic in any service worker as a regression, even if the process remains running.
-- Maintain an independent Arch package for the complete service, PAM module, portal, and helpers, published directly as assets on GitHub Releases (no separate pacman repository).
+- Build independent, versioned Linux executable archives on GitHub Releases and let Soar track them. Preserve a stable user-service executable symlink so installation and systemd configuration are each one-time tasks.
+- Treat PAM/portal integration as a distinct compatibility milestone, since Soar cannot install privileged PAM modules or register a portal automatically.
 - Continue to incorporate upstream security and compatibility updates. `credentialsd` and `libwebauthn` are separate projects, not oo8 dependencies.
 
 ## Safety gates before local installation
 
 1. GitHub CI must pass for the exact commit being packaged.
-2. A local package must be built without installing it, then inspected for file conflicts and manifest completeness.
-3. Exercise the package with private D-Bus and temporary keyrings; no integration tests may use real keyring data.
+2. Build a standalone Soar-compatible executable archive, inspect its contents and executable paths, and test the exact daemon before publication.
+3. Exercise the daemon with private D-Bus and temporary keyrings; no integration tests may use real keyring data.
 4. Back up encrypted keyring files and record existing package and service state before any replacement.
 5. Verify replacement and rollback paths; no deletion of original encrypted keyrings, Edge profiles, or systemd credentials.
-6. Package installation remains an explicit separate action; successful CI never automatically updates a user's machine.
-7. Only version tags in the form `v0.7.0.oo8.1` trigger publication to GitHub Releases; ordinary commits create temporary CI artifacts, not releases. A tagged package must pass manifest checks and the isolated startup regression first.
+6. The first Soar installation and user-service setup require a separate explicit rollout; GitHub CI never installs on anyone's computer. After installation, user-initiated `soar update` fetches new stable releases.
+7. Version tags `v*` trigger GitHub Releases; ordinary commits produce temporary CI artifacts, not releases. Tagged archives must pass content checks and isolated startup tests.
 
 ### Regression gate
 
@@ -28,7 +29,7 @@ Run through `bash tests/oo8-startup-race.sh` after building `oo7-daemon`. This t
 
 ### Current status
 
-This fork begins from upstream main commit `901e7406`. Do not treat the current source tree as production-validated or claim that a browser's lost tabs were necessarily caused by the daemon. The startup regression gate and packaging validation must finish before advising an installation.
+This fork begins from upstream main commit `901e7406`. Do not treat the current source tree as production-validated or claim that a browser's lost tabs were necessarily caused by the daemon. The startup regression gate and Soar archive release validation must finish before advising an installation.
 
 ## Upstream workflow
 
