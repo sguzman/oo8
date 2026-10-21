@@ -1,0 +1,17 @@
+# Insert this [packages.oo8] stanza in ~/.config/soar/packages.toml once.
+# Soar checks sguzman/oo8 GitHub Releases when running 'soar update'.
+# This is a fragment, not a replacement for your existing Soar config.
+
+[packages.oo8]
+github = "sguzman/oo8"
+asset_pattern = "oo8-x86_64-linux.tar.gz"
+pkg_type = "archive"
+entrypoint = "oo7-daemon"
+binaries = [
+  { source = "bin/oo7-daemon", link_as = "oo7-daemon" },
+  { source = "bin/oo7-daemon-login", link_as = "oo7-daemon-login" },
+  { source = "bin/oo7-portal", link_as = "oo7-portal" },
+  { source = "bin/oo7-cli", link_as = "oo7-cli" },
+  { source = "bin/git-credential-oo7", link_as = "git-credential-oo7" },
+  { source = "bin/cargo-credential-oo7", link_as = "cargo-credential-oo7" },
+]
