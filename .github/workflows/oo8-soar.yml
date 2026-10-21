@@ -43,6 +43,11 @@ jobs:
             OO8_STARTUP_ITERATIONS="$OO8_STARTUP_ITERATIONS" \
             bash "$GITHUB_WORKSPACE/tests/oo8-startup-race.sh" \
             unused "$GITHUB_WORKSPACE/target/release/oo7-daemon"
+      - name: Exercise persistent keyring lifecycle with packaged executables
+        run: |
+          runuser -u oo8ci -- bash "$GITHUB_WORKSPACE/tests/oo8-keyring-lifecycle.sh" \
+            "$GITHUB_WORKSPACE/target/release/oo7-daemon" \
+            "$GITHUB_WORKSPACE/target/release/oo7-cli"
       - name: Assemble Soar release archive
         run: |
           set -euo pipefail
