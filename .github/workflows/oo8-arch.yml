@@ -90,7 +90,7 @@ jobs:
             test -s "$name"
           done
           # Ensure database indexes the package that is actually attached.
-          tar -xOf oo8.db desc 2>/dev/null || tar -tf oo8.db | head -n 20
+          tar -tf oo8.db | grep -Eq '^oo8-[^/]+/desc
       - name: Save staging package (never install automatically)
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
@@ -134,7 +134,58 @@ jobs:
             for (const name of required) {
               if (!names.includes(name)) throw new Error('Missing release asset: ' + name);
             }
-            if (!names.some(n => /^oo8-.*\\.pkg\\.tar\\.zst$/.test(n))) {
+            if (!names.some(n => /^oo8-.*\.pkg\.tar\.zst$/.test(n))) {
+              throw new Error('No installable oo8 package attached to release');
+            }
+            await github.rest.repos.updateRelease({
+              owner, repo, release_id: release.id,
+              draft: false, prerelease: false, make_latest: 'true'
+            });
+
+      - name: Save staging package (never install automatically)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oo8-arch-package-${{ github.sha }}
+          path: |
+            packaging/arch/oo8-*.pkg.tar.zst
+            packaging/arch/oo8-*.pkg.tar.zst.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Attach package and pacman database to a draft GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          # Publishing as draft prevents the /latest/download repository
+          # from pointing at an incompletely uploaded release.
+          draft: true
+          prerelease: false
+          make_latest: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            packaging/arch/oo8-*.pkg.tar.zst
+            packaging/arch/oo8-*.pkg.tar.zst.sha256
+            packaging/arch/oo8.db
+            packaging/arch/oo8.files
+      - name: Publish validated Release and advance pacman's latest pointer
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = context.ref.replace('refs/tags/', '');
+            const { data: release } = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner, repo, release_id: release.id, per_page: 100
+            });
+            const names = assets.map(a => a.name);
+            const required = ['oo8.db', 'oo8.files'];
+            for (const name of required) {
+              if (!names.includes(name)) throw new Error('Missing release asset: ' + name);
+            }
+            if (!names.some(n => /^oo8-.*\.pkg\.tar\.zst$/.test(n))) {
               throw new Error('No installable oo8 package attached to release');
             }
             await github.rest.repos.updateRelease({
