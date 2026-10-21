@@ -108,9 +108,37 @@ impl PamListener {
 
     /// Start the PAM listener
     pub async fn start(self) -> Result<(), Error> {
-        // Remove old socket if it exists
+        // Only unlink a *stale* socket. Another daemon may already be
+        // serving PAM requests here, even if this process has not yet lost
+        // the Secret Service D-Bus name race. Unlinking a live listener's
+        // pathname permanently disconnects new PAM clients from it.
         if self.socket_path.exists() {
-            tokio::fs::remove_file(&self.socket_path).await?;
+            match UnixStream::connect(&self.socket_path).await {
+                Ok(stream) => {
+                    drop(stream);
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::AddrInUse,
+                        format!("Active PAM listener at {}", self.socket_path.display()),
+                    )
+                    .into());
+                }
+                Err(err)
+                    if matches!(
+                        err.kind(),
+                        std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::NotFound
+                    ) =>
+                {
+                    // A socket left behind by a dead daemon is safe to
+                    // remove. Ignore disappearance if another startup
+                    // removed it concurrently.
+                    match tokio::fs::remove_file(&self.socket_path).await {
+                        Ok(()) => {}
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                        Err(err) => return Err(err.into()),
+                    }
+                }
+                Err(err) => return Err(err.into()),
+            }
         }
 
         let listener = UnixListener::bind(&self.socket_path)?;
