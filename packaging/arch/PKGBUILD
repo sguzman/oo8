@@ -16,9 +16,17 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd "$srcdir/oo8"
-  printf '0.7.0.alpha.r%s.g%s' \
-    "$(git rev-list --count HEAD)" \
-    "$(git rev-parse --short=7 HEAD)"
+  # A tagged GitHub Release becomes the Arch package version. Other commits
+  # remain individually identifiable development snapshots.
+  local release_tag
+  release_tag="$(git tag --points-at HEAD --list 'v[0-9]*' | LC_ALL=C sort -V | tail -n 1)"
+  if [[ -n "$release_tag" ]]; then
+    printf '%s' "${release_tag#v}"
+  else
+    printf '0.7.0.alpha.r%s.g%s' \
+      "$(git rev-list --count HEAD)" \
+      "$(git rev-parse --short=7 HEAD)"
+  fi
 }
 
 build() {
