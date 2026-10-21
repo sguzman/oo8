@@ -4,9 +4,23 @@ oo8 is an independently maintained fork of [oo7](https://github.com/linux-creden
 
 **Status: development.** The live desktop must not be switched over until a fully tested standalone release exists. Existing encrypted keyrings, systemd credentials, and upstream MIT attribution are preserved.
 
-## Canonical installation, updates, and service management
+## Installation and updates
 
-**oo8 is distributed from this GitHub repository through GitHub Releases and managed on Linux with Soar.** This is the expected install and update workflow, not an optional alternative to pacman.
+**Two supported channels:** Cargo installs the latest development code from `main`; GitHub Releases + Soar installs versioned builds. Neither requires a separate GitHub repo, AUR submission, or pacman registration. The service unit is configured only once for whichever channel you choose.
+
+### Development: Cargo from main
+
+Use [Cargo development installation](packaging/cargo/README.md) to build directly from `main` without tags or releases:
+
+```fish
+cargo install --git https://github.com/sguzman/oo8.git --branch main --package oo7-daemon --locked --force
+```
+
+Re-running the same command fetches current `main` and replaces installed binaries. Cargo does not automatically follow new commits; run it again to update. The Cargo systemd user-service template uses `%h/.cargo/bin/oo7-daemon`, and no further edits are required after the initial configuration. Do not mix Cargo and Soar binaries in the same live service.
+
+### Stable releases: Soar
+
+**oo8 is distributed from this GitHub repository through GitHub Releases and managed on Linux with Soar.** This is the default release install and update workflow, not an alternative package for pacman.
 
 1. **Install (once):** After the initial tested release, register oo8 with Soar using the [Soar package declaration](packaging/soar/packages.toml). Soar downloads and manages the released executables.
 2. **Configure systemd (once):** Install the [user-service unit](packaging/soar/oo7-daemon.service) and reload/enable it. It must target a stable Soar-managed executable link and preserve `org.freedesktop.secrets` plus the existing `oo7.keyring-encryption-password` credential.
@@ -26,7 +40,7 @@ Full procedure: [Soar and systemd setup](packaging/soar/README.md).
 - [Maintenance and rollout policy](OO8.md)
 - [Download releases](https://github.com/sguzman/oo8/releases)
 
-**Distribution:** GitHub Releases -> Soar -> fixed user-service executable link. Soar tracks and updates released binaries through `soar update`; no pacman registration, manually maintained PKGBUILD, separate GitHub repo, or repeated systemd edits. A running daemon uses the new executable after the next service restart/login.
+**Release distribution:** GitHub Releases -> Soar -> fixed user-service executable link. **Development distribution:** current main -> Cargo -> fixed Cargo executable link. Soar tracks and updates released binaries through `soar update`; no pacman registration, manually maintained PKGBUILD, separate GitHub repo, or repeated systemd edits. A running daemon uses the new executable after the next service restart/login.
 
 Soar does not manage PAM modules or desktop portal registration. The first rollout focuses on the user daemon and existing systemd encrypted-credential unlock. Other integration is explicitly a separate tested milestone.
 
