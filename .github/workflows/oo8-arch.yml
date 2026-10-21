@@ -3,10 +3,12 @@ name: oo8 Arch package
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # Required only to attach binaries to a GitHub Release for a version tag.
+  contents: write
 
 # New pushes supersede pending staging runs for the same branch.
 concurrency:
@@ -22,7 +24,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Prepare Arch build environment
         run: |
-          pacman -Syu --noconfirm --needed git meson ninja pkgconf rust sudo
+          pacman -Syu --noconfirm --needed git meson ninja pkgconf rust sudo dbus
           useradd -m -s /bin/bash builder
           printf 'builder ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/oo8-builder
           chmod 0440 /etc/sudoers.d/oo8-builder
@@ -44,10 +46,52 @@ jobs:
           for path in usr/lib/oo7-daemon usr/lib/oo7-daemon-login usr/lib/oo7-portal usr/lib/security/pam_oo7.so usr/bin/oo7-cli usr/lib/systemd/user/oo7-daemon.service; do
             grep -Fq "$path" /tmp/oo8-package-manifest.txt
           done
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            expected="${GITHUB_REF_NAME#v}"
+            [[ "$expected" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+(\\.[[:alnum:]]+)*$ ]] || {
+              echo "Release tag must look like v0.7.0.oo8.1" >&2
+              exit 1
+            }
+            actual="$(pacman -Qp "$pkg" | awk '{print $2}')"
+            test "$actual" = "${expected}-1" || {
+              echo "Tag/package mismatch: expected ${expected}-1, got $actual" >&2
+              exit 1
+            }
+          fi
+      - name: Test packaged daemon with disposable keyrings (release only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          pkg="$(find packaging/arch -maxdepth 1 -type f -name 'oo8-*.pkg.tar.zst' -print -quit)"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          bsdtar -xf "$pkg" -C "$tmp" usr/lib/oo7-daemon
+          OO8_STARTUP_ITERATIONS=12 bash tests/oo8-startup-race.sh unused "$tmp/usr/lib/oo7-daemon"
+      - name: Compute package checksum
+        run: |
+          set -euo pipefail
+          cd packaging/arch
+          for pkg in oo8-*.pkg.tar.zst; do
+            sha256sum "$pkg" > "$pkg.sha256"
+          done
       - name: Save staging package (never install automatically)
+        if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: oo8-arch-package-${{ github.sha }}
-          path: packaging/arch/oo8-*.pkg.tar.zst
+          path: |
+            packaging/arch/oo8-*.pkg.tar.zst
+            packaging/arch/oo8-*.pkg.tar.zst.sha256
           if-no-files-found: error
           retention-days: 14
+      - name: Publish Arch package in GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          prerelease: true
+          make_latest: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            packaging/arch/oo8-*.pkg.tar.zst
+            packaging/arch/oo8-*.pkg.tar.zst.sha256
