@@ -87,6 +87,7 @@ as_user systemd-run --user --unit=oo8-regression --collect \
     --property="LoadCredential=oo7.keyring-encryption-password:$credential" \
     --property="Environment=XDG_DATA_HOME=$data/data" \
     --property="Environment=OO7_PAM_SOCKET=$data/pam.sock" \
+    --property="Environment=XDG_RUNTIME_DIR=/run/user/$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus" \
     "$daemon" || fail "systemd-run could not launch daemon"
 
 wait_ready() {
