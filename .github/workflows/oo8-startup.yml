@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# New pushes supersede pending staging runs for the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   startup-race:
     runs-on: ubuntu-latest
