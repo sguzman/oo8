@@ -1,0 +1,60 @@
+name: Dependency refresh
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/dependency-refresh.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dependency-refresh-main
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install PAM headers for the workspace check
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpam0g-dev
+
+      - name: Refresh all compatible locked dependencies
+        run: |
+          set -euo pipefail
+          cargo update
+          # The currently locked inout 0.2.3 was yanked. Pin to the
+          # last non-yanked compatible 0.2.x patch until RustCrypto
+          # publishes a replacement.
+          cargo update -p inout --precise 0.2.2
+
+      - name: Verify the updated lockfile and native daemon
+        run: |
+          set -euo pipefail
+          cargo check --workspace --locked
+          cargo test -p oo7-daemon --locked
+
+      - name: Commit tested lockfile update directly to main
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- Cargo.lock; then
+            echo "Cargo.lock is already up-to-date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "deps: refresh compatible Rust dependencies and replace yanked inout"
+          # Fail safely rather than force-pushing over concurrent development.
+          git push origin HEAD:main
