@@ -31,6 +31,12 @@ Run through `bash tests/oo8-startup-race.sh` after building `oo7-daemon`. This t
 
 This fork begins from upstream main commit `901e7406`. Do not treat the current source tree as production-validated or claim that a browser's lost tabs were necessarily caused by the daemon. The startup regression gate and Soar archive release validation must finish before advising an installation.
 
+## Dependencies and security audits
+
+- The [dependency refresh workflow](.github/workflows/dependency-refresh.yml) runs a compatible `cargo update`, replaces the yanked `inout 0.2.3` with `0.2.2`, verifies workspace compilation and daemon tests, then commits only the updated lockfile to `main`. There is no force-push. Cargo dependencies still constrained to older major versions require a separate source migration and corresponding tests.
+- The current RustSec *unmaintained* advisories concern `zvariant`, `zvariant_derive`, and `zbus_names`, retained through `zbus 5`. `zbus 6` consolidates those APIs, but the current `ashpd 0.13` integration uses `zbus 5`. Upgrading only one side creates incompatible D-Bus types. Coordinate the `zbus` and `ashpd` upgrades with source changes and keep the audit gate visible until the migration passes.
+- Do not globally ignore advisories or label a dependency-only release production-safe without passing the isolated credential regression and normal Rust CI.
+
 ## Upstream workflow
 
 Work on the existing `main` branch. Preserve the ability to compare and synchronize with upstream. Review upstream changes for compatibility and security before releasing an oo8 package. Use Rust edition 2024 throughout the workspace unless a particular crate has a documented compatibility requirement.
