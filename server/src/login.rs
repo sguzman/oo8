@@ -19,6 +19,8 @@ use rustix::{
 #[cfg(target_os = "linux")]
 const HELPER_TIMEOUT_SECS: u64 = 120;
 #[cfg(target_os = "linux")]
+const MAX_LOGIN_SECRET_BYTES: usize = 64 * 1024;
+#[cfg(target_os = "linux")]
 const BINARY_NAME: &str = env!("CARGO_BIN_NAME");
 
 #[cfg(target_os = "linux")]
@@ -65,22 +67,32 @@ fn write_secret_completely(
 }
 
 #[cfg(target_os = "linux")]
+fn read_login_secret(mut source: impl Read) -> io::Result<zeroize::Zeroizing<Vec<u8>>> {
+    let mut secret = zeroize::Zeroizing::new(Vec::new());
+    source
+        .by_ref()
+        .take((MAX_LOGIN_SECRET_BYTES + 1) as u64)
+        .read_to_end(&mut secret)?;
+    if secret.is_empty() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Empty login secret"));
+    }
+    if secret.len() > MAX_LOGIN_SECRET_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Login secret exceeds maximum accepted length",
+        ));
+    }
+    Ok(secret)
+}
+
+#[cfg(target_os = "linux")]
 fn main() {
     tracing_subscriber::fmt::init();
 
-    let mut secret = vec![];
-    io::stdin()
-        .lock()
-        .read_to_end(&mut secret)
-        .unwrap_or_else(|e| {
-            tracing::error!("Failed to read secret from stdin: {e}");
-            std::process::exit(1);
-        });
-
-    if secret.is_empty() {
-        tracing::error!("No secret provided on stdin");
+    let mut secret = read_login_secret(io::stdin().lock()).unwrap_or_else(|e| {
+        tracing::error!("Invalid login secret on stdin: {e}");
         std::process::exit(1);
-    }
+    });
 
     tracing::info!("Starting {BINARY_NAME}");
 
@@ -181,7 +193,7 @@ fn main() {
         std::process::exit(1);
     });
 
-    zeroize::Zeroize::zeroize(&mut secret);
+    zeroize::Zeroize::zeroize(&mut *secret);
 
     rustix::fs::fcntl_add_seals(
         &memfd,
@@ -216,6 +228,23 @@ fn main() {}
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn login_secret_reader_rejects_empty_and_oversized_inputs() {
+        let empty = read_login_secret(io::Cursor::new(Vec::<u8>::new()));
+        assert_eq!(empty.unwrap_err().kind(), io::ErrorKind::InvalidInput);
+
+        let oversized = read_login_secret(io::Cursor::new(vec![1u8; MAX_LOGIN_SECRET_BYTES + 10]));
+        assert_eq!(oversized.unwrap_err().kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn login_secret_reader_accepts_maximum_length() -> io::Result<()> {
+        let secret = vec![7u8; MAX_LOGIN_SECRET_BYTES];
+        let read = read_login_secret(io::Cursor::new(&secret))?;
+        assert_eq!(&*read, &secret);
+        Ok(())
+    }
 
     #[test]
     fn live_login_helper_socket_is_preserved() -> io::Result<()> {
