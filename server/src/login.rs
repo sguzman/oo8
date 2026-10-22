@@ -56,6 +56,23 @@ fn remove_stale_login_socket(path: &Path) -> io::Result<()> {
 }
 
 #[cfg(target_os = "linux")]
+fn write_secret_completely(
+    secret: &[u8],
+    mut write: impl FnMut(&[u8]) -> io::Result<usize>,
+) -> io::Result<()> {
+    let mut remaining = secret;
+    while !remaining.is_empty() {
+        match write(remaining) {
+            Ok(0) => return Err(io::Error::from(io::ErrorKind::WriteZero)),
+            Ok(count) => remaining = &remaining[count..],
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -159,8 +176,12 @@ fn main() {
         std::process::exit(1);
     });
 
-    rustix::io::write(&memfd, &secret).unwrap_or_else(|e| {
-        tracing::error!("Failed to write to memfd: {e}");
+    write_secret_completely(&secret, |bytes| {
+        rustix::io::write(&memfd, bytes)
+            .map_err(|err| io::Error::from_raw_os_error(err.raw_os_error()))
+    })
+    .unwrap_or_else(|e| {
+        tracing::error!("Failed to write complete secret to memfd: {e}");
         let _ = std::fs::remove_file(socket_path);
         std::process::exit(1);
     });
@@ -224,6 +245,30 @@ mod tests {
         remove_stale_login_socket(&path)?;
         assert!(!path.exists(), "Stale helper socket was not removed");
         Ok(())
+    }
+
+    #[test]
+    fn secret_transfer_handles_partial_and_interrupted_writes() -> io::Result<()> {
+        let secret = b"disposable-complete-transfer";
+        let mut output = Vec::new();
+        let mut first = true;
+        write_secret_completely(secret, |remaining| {
+            if first {
+                first = false;
+                return Err(io::Error::from(io::ErrorKind::Interrupted));
+            }
+            let n = remaining.len().min(3);
+            output.extend_from_slice(&remaining[..n]);
+            Ok(n)
+        })?;
+        assert_eq!(output, secret);
+        Ok(())
+    }
+
+    #[test]
+    fn secret_transfer_rejects_write_zero() {
+        let failure = write_secret_completely(b"test", |_| Ok(0));
+        assert_eq!(failure.unwrap_err().kind(), io::ErrorKind::WriteZero);
     }
 
     #[test]
