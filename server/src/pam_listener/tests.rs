@@ -548,8 +548,8 @@ async fn pam_acknowledgment_roundtrip() -> Result<(), Box<dyn std::error::Error>
 }
 
 #[tokio::test]
-async fn pam_acknowledgment_reports_disconnected_client()
--> Result<(), Box<dyn std::error::Error>> {
+async fn pam_acknowledgment_reports_disconnected_client() -> Result<(), Box<dyn std::error::Error>>
+{
     let (mut daemon, client) = tokio::net::UnixStream::pair()?;
     drop(client);
 
