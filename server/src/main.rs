@@ -198,12 +198,21 @@ async fn inner_main(args: Args) -> Result<(), Error> {
     let secret = if args.login {
         let mut stdin = std::io::stdin().lock();
         if stdin.is_terminal() {
-            let password = rpassword::prompt_password("Enter the login password: ")?;
+            let password = zeroize::Zeroizing::new(rpassword::prompt_password(
+                "Enter the login password: ",
+            )?);
             if password.is_empty() {
                 tracing::error!("Login password can't be empty.");
                 return Err(Error::EmptyPassword);
             }
-            Some(oo7::Secret::text(password))
+            if password.len() > MAX_LOGIN_SECRET_BYTES {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Login password exceeds maximum accepted length",
+                )
+                .into());
+            }
+            Some(oo7::Secret::text(password.as_str()))
         } else {
             Some(read_bounded_login_secret(&mut stdin)?)
         }
