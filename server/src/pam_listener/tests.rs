@@ -919,7 +919,10 @@ async fn pam_mixed_old_passwords_reject_without_partial_change()
         partial.is_err(),
         "A change that fails on another persistent keyring is incomplete"
     );
-    assert!(alpha.is_locked().await, "Preflight unexpectedly unlocked Alpha");
+    assert!(
+        alpha.is_locked().await,
+        "Preflight unexpectedly unlocked Alpha"
+    );
     assert!(
         beta.is_locked().await,
         "Unmatched keyring was left unlocked"
@@ -969,7 +972,10 @@ async fn pam_changes_multiple_keyrings_when_every_old_password_matches()
     for collection in collections.values() {
         if collection.label().await == "Alpha" || collection.label().await == "Beta" {
             checked += 1;
-            assert!(collection.is_locked().await, "Password change left keyring unlocked");
+            assert!(
+                collection.is_locked().await,
+                "Password change left keyring unlocked"
+            );
             assert!(
                 collection
                     .set_locked(false, Some(Secret::from("shared-old-password")))
