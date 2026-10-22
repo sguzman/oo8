@@ -17,6 +17,23 @@ use crate::protocol::{PamMessage, PamResponse};
 /// Timeout for socket operations (in milliseconds)
 const SOCKET_TIMEOUT_MS: u64 = 5000;
 
+// Both request and response frames contain only short credentials and status.
+ // Reject client/server-controlled lengths before allocating buffers.
+const MAX_PAM_FRAME_BYTES: usize = 64 * 1024;
+
+fn checked_pam_frame_length(length: usize) -> Result<u32, SocketError> {
+    if length == 0 || length > MAX_PAM_FRAME_BYTES {
+        return Err(SocketError::Send(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Invalid PAM frame length {length} (maximum {MAX_PAM_FRAME_BYTES})"),
+        )));
+    }
+
+    u32::try_from(length).map_err(|_| {
+        SocketError::Send(io::Error::new(io::ErrorKind::InvalidData, "PAM frame length overflow"))
+    })
+}
+
 struct SavedSignals {
     sigpipe: libc::sigaction,
     sigchld: libc::sigaction,
@@ -331,7 +348,7 @@ async fn send_secret_to_daemon_async(
     tracing::debug!("Sending message for user {}", message.username);
     let message_bytes = Zeroizing::new(message.to_bytes().map_err(SocketError::Serialize)?);
 
-    let length = message_bytes.len() as u32;
+    let length = checked_pam_frame_length(message_bytes.len())?;
     stream
         .write_all(&length.to_le_bytes())
         .await
@@ -357,7 +374,8 @@ async fn send_secret_to_daemon_async(
     .await
     {
         Ok(Ok(_)) => {
-            let length = u32::from_le_bytes(length_bytes) as usize;
+            let length = checked_pam_frame_length(u32::from_le_bytes(length_bytes) as usize)?
+                as usize;
             let mut response_bytes = vec![0u8; length];
             if let Ok(Ok(_)) = timeout(
                 Duration::from_millis(SOCKET_TIMEOUT_MS),
@@ -391,6 +409,25 @@ mod tests {
     use tokio::{io::AsyncReadExt, net::UnixListener};
 
     use super::*;
+
+    #[test]
+    fn pam_frames_must_have_bounded_lengths() {
+        assert_eq!(checked_pam_frame_length(1).unwrap(), 1);
+        assert_eq!(
+            checked_pam_frame_length(MAX_PAM_FRAME_BYTES).unwrap(),
+            MAX_PAM_FRAME_BYTES as u32
+        );
+
+        for length in [0, MAX_PAM_FRAME_BYTES + 1, u32::MAX as usize] {
+            assert!(
+                matches!(
+                    checked_pam_frame_length(length),
+                    Err(SocketError::Send(err)) if err.kind() == io::ErrorKind::InvalidData
+                ),
+                "Invalid PAM frame length {length} was accepted"
+            );
+        }
+    }
 
     #[tokio::test]
     async fn test_send_receive() -> Result<(), Box<dyn std::error::Error>> {
