@@ -16,14 +16,14 @@ Use [Cargo development installation](packaging/cargo/README.md) from your local 
 cargo install --path ./server --locked --force
 ```
 
-Re-running the same command rebuilds your local checkout and replaces the installed oo8 binaries. Cargo does not automatically follow new commits; run it again to update. The Cargo systemd user-service template uses `%h/.cargo/bin/oo8-daemon`, and no further edits are required after the initial configuration. Do not mix Cargo and Soar binaries in the same live service.
+Re-running the same command rebuilds your local checkout and replaces the installed oo8 binaries. Cargo does not automatically follow new commits; run it again to update. The separate [oo8-daemon.service](packaging/cargo/oo8-daemon.service) uses `%h/.cargo/bin/oo8-daemon`, and no further edits are required after the initial configuration. Do not mix Cargo and Soar binaries in the same live service.
 
 ### Stable releases: Soar
 
 **oo8 is distributed from this GitHub repository through GitHub Releases and managed on Linux with Soar.** This is the default release install and update workflow, not an alternative package for pacman.
 
 1. **Install (once):** After the initial tested release, register oo8 with Soar using the [Soar package declaration](packaging/soar/packages.toml). Soar downloads and manages the released executables.
-2. **Configure systemd (once):** Install the [user-service unit](packaging/soar/oo7-daemon.service) and reload/enable it. It must target a stable Soar-managed executable link and preserve `org.freedesktop.secrets` plus the existing `oo7.keyring-encryption-password` credential.
+2. **Configure systemd (once):** Install the separate [oo8 user-service unit](packaging/soar/oo8-daemon.service), disable upstream oo7's unit and enable oo8 at a controlled switchover. It must target a stable Soar-managed executable link and preserve `org.freedesktop.secrets` plus the existing `oo7.keyring-encryption-password` credential.
 3. **Publish new versions:** Develop on `main`; version tags publish tested GitHub Releases. Routine commits alone are not installed releases.
 4. **Update:** Run `soar update`. New releases replace the managed executables without editing the user-service unit or Soar declaration. The running daemon takes the new executable after the next service restart/login.
 5. **Maintain:** Keep upstream oo7 compatibility, encrypted keyrings, release validation, and rollback instructions. System-installed PAM modules and desktop portal registration are separately managed; Soar does not install those privileged/system integration files.
@@ -34,7 +34,7 @@ Full procedure: [Soar and systemd setup](packaging/soar/README.md).
 
 - [One-time Soar + user-service setup](packaging/soar/README.md)
 - [Soar declarative package fragment](packaging/soar/packages.toml)
-- [User service template](packaging/soar/oo7-daemon.service)
+- [User service template](packaging/soar/oo8-daemon.service)
 - [Independent GitHub release builder](.github/workflows/oo8-soar.yml)
 - [First-trial dogfood gates](DOGFOOD.md)
 - [Isolated exact-archive canary](tests/oo8-archive-canary.sh)

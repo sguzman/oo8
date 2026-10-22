@@ -33,8 +33,9 @@ Before replacing the current daemon:
 - Back up the existing **encrypted** keyrings separately, and preserve the
   encrypted systemd credential and original vendor user unit. Never log or
   upload passwords or private keyring contents.
-- Confirm the exact packaged executable, service-unit `ExecStart`, and
-  credential import. Test the **actual shipped unit** in a disposable systemd
+- Confirm the exact packaged executable, the separate `oo8-daemon.service`
+  unit's `ExecStart`, credential import, and `dbus-org.freedesktop.secrets.service`
+  activation alias. Verify the distro's D-Bus `SystemdService=` target. Test the **actual shipped unit** in a disposable systemd
   user manager; a minimal transient unit is not an equivalent test.
 - Choose either Soar release or Cargo development installation; never run
   both as the live `org.freedesktop.secrets` owner.
@@ -42,8 +43,9 @@ Before replacing the current daemon:
   part of a daemon-only trial. Switch only at a controlled login or an
   explicitly authorized time, not during a live browser session.
 
-Rollback: stop the new service, restore/remove only the oo8 user unit
-override, reload the user manager and restore the previous service.
+Rollback: stop and disable `oo8-daemon.service`, re-enable the preserved
+`oo7-daemon.service`, reload the user manager, and restore the previous
+D-Bus activation alias. Never delete encrypted keyrings.
 Do not delete or recreate encrypted keyrings during rollback.
 
 The shipped Soar and Cargo user-service units deliberately avoid

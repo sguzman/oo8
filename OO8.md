@@ -17,7 +17,7 @@ oo8 is an independently maintained fork of [linux-credentials/oo7](https://githu
 2. Build a standalone Soar-compatible executable archive, inspect its contents and executable paths, and test the exact daemon before publication.
 3. Exercise the daemon with private D-Bus and temporary keyrings; no integration tests may use real keyring data.
 4. Back up encrypted keyring files and record existing package and service state before any replacement.
-5. Verify replacement and rollback paths; no deletion of original encrypted keyrings, Edge profiles, or systemd credentials.
+5. Verify replacement and rollback paths. Keep separate `oo7-daemon.service` and `oo8-daemon.service` units and route the D-Bus activation alias to only the selected provider; never delete original encrypted keyrings, Edge profiles, or systemd credentials.
 6. The first Soar installation and user-service setup require a separate explicit rollout; GitHub CI never installs on anyone's computer. After installation, user-initiated `soar update` fetches new stable releases.
 7. Version tags `v*` trigger GitHub Releases; ordinary commits produce temporary CI artifacts, not releases. Tagged archives must pass content checks and isolated startup tests.
 
