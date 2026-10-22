@@ -67,6 +67,18 @@ fn write_secret_completely(
 }
 
 #[cfg(target_os = "linux")]
+fn check_memfd_send_count(count: usize) -> io::Result<()> {
+    if count == 1 {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::WriteZero,
+            "Login secret descriptor was not fully transferred",
+        ))
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn read_login_secret(mut source: impl Read) -> io::Result<zeroize::Zeroizing<Vec<u8>>> {
     let mut secret = zeroize::Zeroizing::new(Vec::new());
     source
@@ -215,11 +227,14 @@ fn main() {
     cmsg_buf.push(SendAncillaryMessage::ScmRights(&fds));
 
     let iov = [IoSlice::new(&[0u8])];
-    rustix::net::sendmsg(&stream, &iov, &mut cmsg_buf, SendFlags::empty()).unwrap_or_else(|e| {
-        tracing::error!("Failed to send memfd: {e}");
-        let _ = std::fs::remove_file(socket_path);
-        std::process::exit(1);
-    });
+    rustix::net::sendmsg(&stream, &iov, &mut cmsg_buf, SendFlags::empty())
+        .map_err(|err| io::Error::from_raw_os_error(err.raw_os_error()))
+        .and_then(check_memfd_send_count)
+        .unwrap_or_else(|e| {
+            tracing::error!("Failed to transfer sealed memfd: {e}");
+            let _ = std::fs::remove_file(socket_path);
+            std::process::exit(1);
+        });
 
     tracing::info!("Secret delivered to daemon");
     let _ = std::fs::remove_file(socket_path);
@@ -231,6 +246,19 @@ fn main() {}
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sealed_memfd_transfer_requires_complete_control_message() {
+        assert!(check_memfd_send_count(1).is_ok());
+        assert_eq!(
+            check_memfd_send_count(0).unwrap_err().kind(),
+            io::ErrorKind::WriteZero
+        );
+        assert_eq!(
+            check_memfd_send_count(2).unwrap_err().kind(),
+            io::ErrorKind::WriteZero
+        );
+    }
 
     #[test]
     fn login_secret_reader_rejects_empty_and_oversized_inputs() {
