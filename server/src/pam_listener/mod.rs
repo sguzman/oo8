@@ -18,6 +18,30 @@ use zgvariant::{
 
 use crate::{Service, error::Error};
 
+// A PAM frame holds a username and two credentials, not bulk data.
+// Check the client-controlled length before allocating or reading its body.
+const MAX_PAM_MESSAGE_BYTES: usize = 64 * 1024;
+
+async fn read_pam_message(stream: &mut UnixStream) -> Result<PamMessage, Error> {
+    let mut length_bytes = [0u8; 4];
+    stream.read_exact(&mut length_bytes).await?;
+    let message_length = u32::from_le_bytes(length_bytes) as usize;
+
+    if message_length == 0 || message_length > MAX_PAM_MESSAGE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Invalid PAM message length {message_length} (maximum {MAX_PAM_MESSAGE_BYTES})"),
+        )
+        .into());
+    }
+
+    let mut message_bytes = vec![0u8; message_length];
+    stream.read_exact(&mut message_bytes).await?;
+
+    PamMessage::from_bytes(&message_bytes)
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string()).into())
+}
+
 #[derive(Debug, Clone, Copy, Serialize_repr, Deserialize_repr, Type, PartialEq, Eq)]
 #[repr(u8)]
 enum PamOperation {
@@ -206,16 +230,7 @@ impl PamListener {
             peer_cred.pid().unwrap_or(0)
         );
 
-        // Read the message length prefix (4 bytes, little-endian)
-        let mut length_bytes = [0u8; 4];
-        stream.read_exact(&mut length_bytes).await?;
-        let message_length = u32::from_le_bytes(length_bytes) as usize;
-
-        let mut message_bytes = vec![0u8; message_length];
-        stream.read_exact(&mut message_bytes).await?;
-
-        let message = PamMessage::from_bytes(&message_bytes)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+        let message = read_pam_message(&mut stream).await?;
 
         let response = match message.operation {
             PamOperation::Unlock => {

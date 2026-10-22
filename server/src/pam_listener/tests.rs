@@ -345,3 +345,42 @@ async fn message_serialization() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn pam_rejects_invalid_frame_lengths_before_allocation(
+) -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::{
+        io::AsyncWriteExt,
+        time::{Duration, timeout},
+    };
+
+    for length in [0u32, (MAX_PAM_MESSAGE_BYTES + 1) as u32, u32::MAX] {
+        let (mut client, mut server) = tokio::net::UnixStream::pair()?;
+        client.write_all(&length.to_le_bytes()).await?;
+
+        // A rejected header must not wait for a body or allocate its claimed length.
+        let result = timeout(Duration::from_secs(1), read_pam_message(&mut server)).await?;
+        assert!(
+            matches!(&result, Err(Error::IO(err)) if err.kind() == std::io::ErrorKind::InvalidData),
+            "Unexpected result for frame length {length}: {result:?}"
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn pam_accepts_well_formed_bounded_frame() -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::io::AsyncWriteExt;
+
+    let (mut client, mut server) = tokio::net::UnixStream::pair()?;
+    let frame = create_pam_message(PamOperation::Unlock, "tester", &[], b"test-password");
+    assert!(frame.len() - 4 <= MAX_PAM_MESSAGE_BYTES);
+    client.write_all(&frame).await?;
+
+    let message = read_pam_message(&mut server).await?;
+    assert_eq!(message.operation, PamOperation::Unlock);
+    assert_eq!(message.username, "tester");
+    assert_eq!(message.new_secret, b"test-password");
+    Ok(())
+}
