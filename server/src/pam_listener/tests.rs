@@ -414,3 +414,65 @@ async fn pam_rejects_stalled_frame_payload() -> Result<(), Box<dyn std::error::E
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn pam_connection_limit_rejects_overflow_and_recovers()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tokio::{
+        io::AsyncReadExt,
+        sync::Semaphore,
+        time::{Duration, sleep, timeout},
+    };
+
+    let dir = tempfile::tempdir()?;
+    let socket_path = dir.path().join("bounded-pam.sock");
+    let setup = crate::tests::TestServiceSetup::with_disk_keyrings(
+        dir.path().to_path_buf(),
+        Some(socket_path.clone()),
+        None,
+    )
+    .await?;
+    let listener = PamListener::new(setup.server.clone());
+    let slots = Arc::new(Semaphore::new(2));
+    let worker = tokio::spawn(listener.start_with_semaphore(slots.clone()));
+
+    // Wait for the private listener to bind before opening test connections.
+    timeout(Duration::from_secs(2), async {
+        while !socket_path.exists() {
+            sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await?;
+
+    // Keep two valid same-user connections open without sending a frame.
+    let first = tokio::net::UnixStream::connect(&socket_path).await?;
+    let second = tokio::net::UnixStream::connect(&socket_path).await?;
+    timeout(Duration::from_secs(2), async {
+        while slots.available_permits() != 0 {
+            sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await?;
+
+    // Overflow must be rejected promptly while the original two remain
+    // connected, rather than creating another pending credential task.
+    let mut overflow = tokio::net::UnixStream::connect(&socket_path).await?;
+    let mut byte = [0u8; 1];
+    let size = timeout(Duration::from_secs(2), overflow.read(&mut byte)).await??;
+    assert_eq!(size, 0, "Excess connection was not closed");
+
+    // Disconnecting one peer frees capacity for a complete PAM request.
+    drop(first);
+    timeout(Duration::from_secs(2), async {
+        while slots.available_permits() == 0 {
+            sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await?;
+    let message = create_pam_message(PamOperation::Unlock, "testuser", &[], b"test-password");
+    send_pam_message(&socket_path, &message).await?;
+
+    drop(second);
+    worker.abort();
+    Ok(())
+}

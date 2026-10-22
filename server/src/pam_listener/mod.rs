@@ -8,7 +8,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use tokio::{
     io::AsyncReadExt,
     net::{UnixListener, UnixStream},
-    sync::RwLock,
+    sync::{RwLock, Semaphore},
 };
 use zeroize::{Zeroize, ZeroizeOnDrop};
 use zgvariant::{
@@ -21,6 +21,8 @@ use crate::{Service, error::Error};
 // A PAM frame holds a username and two credentials, not bulk data.
 // Check the client-controlled length before allocating or reading its body.
 const MAX_PAM_MESSAGE_BYTES: usize = 64 * 1024;
+// Limit tasks awaiting partially sent frames or slow credential processing.
+const MAX_ACTIVE_PAM_CONNECTIONS: usize = 32;
 
 // Bound the entire read, including the length prefix and payload, so an
 // incomplete same-user connection cannot hold a daemon task forever.
@@ -157,6 +159,11 @@ impl PamListener {
 
     /// Start the PAM listener
     pub async fn start(self) -> Result<(), Error> {
+        self.start_with_semaphore(Arc::new(Semaphore::new(MAX_ACTIVE_PAM_CONNECTIONS)))
+            .await
+    }
+
+    async fn start_with_semaphore(self, active: Arc<Semaphore>) -> Result<(), Error> {
         // Only unlink a *stale* socket. Another daemon may already be
         // serving PAM requests here, even if this process has not yet lost
         // the Secret Service D-Bus name race. Unlinking a live listener's
@@ -204,9 +211,19 @@ impl PamListener {
         loop {
             match listener.accept().await {
                 Ok((stream, _addr)) => {
+                    // Reject overflow instead of spawning an unbounded number
+                    // of tasks. Dropping an excess stream makes the PAM client
+                    // observe a failed request rather than silent success.
+                    let Ok(permit) = active.clone().try_acquire_owned() else {
+                        tracing::warn!("PAM connection limit reached; rejecting connection");
+                        drop(stream);
+                        continue;
+                    };
                     let pam_listener = self.clone();
 
                     tokio::spawn(async move {
+                        // Dropping this guard releases the slot on any exit path.
+                        let _permit = permit;
                         if let Err(e) = pam_listener.handle_connection(stream).await {
                             tracing::error!("Error handling PAM connection: {}", e);
                         }
