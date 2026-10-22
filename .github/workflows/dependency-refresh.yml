@@ -46,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo check --workspace --locked
-          cargo test -p oo7-daemon --locked
+          cargo test -p oo8-daemon --locked
 
       - name: Audit updated lockfile before committing
         uses: EmbarkStudios/cargo-deny-action@v2

@@ -26,7 +26,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y dbus dbus-bin
       - name: Build oo7-compatible daemon and CLI from oo8
-        run: cargo build --locked -p oo7-daemon -p oo7-cli
+        run: cargo build --locked -p oo8-daemon -p oo8-cli
       - name: Exercise startup and systemd credential import in isolation
         env:
           OO8_STARTUP_ITERATIONS: "12"

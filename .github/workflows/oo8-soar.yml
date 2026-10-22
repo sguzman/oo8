@@ -26,11 +26,11 @@ jobs:
       - name: Build portable user-space executables
         run: |
           cargo build --locked --release \
-            -p oo7-daemon \
-            -p oo7-portal \
-            -p oo7-cli \
-            -p git-credential-oo7 \
-            -p cargo-credential-oo7
+            -p oo8-daemon \
+            -p oo8-portal \
+            -p oo8-cli \
+            -p git-credential-oo8 \
+            -p cargo-credential-oo8
       - name: Test daemon as an unprivileged desktop user
         env:
           OO8_STARTUP_ITERATIONS: '12'

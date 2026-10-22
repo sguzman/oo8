@@ -13,7 +13,7 @@ Run from the oo8 repository root after updating the checkout.
 cargo install --path ./server --locked
 ```
 
-The inherited `oo7-daemon` Cargo package builds two distinct oo8 binaries,
+The `oo8-daemon` Cargo package builds two distinct oo8 binaries,
 `oo8-daemon` and `oo8-daemon-login`, into the default Cargo binary directory,
 `~/.cargo/bin`. If you use a customized `CARGO_HOME` or
 `CARGO_INSTALL_ROOT`, the directory may differ.
@@ -66,4 +66,4 @@ reload the user manager; do not delete existing encrypted keyring data.
 See [the release-oriented Soar path](../soar/README.md) for installing
 versioned releases instead of current `main`.
 
-The `oo8-*` names are distinct from distribution-provided upstream executables. The inherited Cargo package name and the `oo7-daemon.service` override filename stay unchanged for now: that user unit intentionally shadows the distro unit rather than starting a second competing Secret Service. Only the process executable is `oo8-daemon`.
+The `oo8-*` names are distinct from distribution-provided upstream executables. The `oo7-daemon.service` override filename stays unchanged for compatibility: it intentionally shadows the distro unit rather than starting a second competing Secret Service. The installed Cargo package and process executable are both `oo8-daemon`.

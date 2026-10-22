@@ -343,7 +343,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cargo-credential-oo7"
+name = "cargo-credential-oo8"
 version = "0.7.0-alpha"
 dependencies = [
  "cargo-credential",
@@ -730,7 +730,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "git-credential-oo7"
+name = "git-credential-oo8"
 version = "0.7.0-alpha"
 dependencies = [
  "oo7",
@@ -1144,7 +1144,7 @@ dependencies = [
  "md-5",
  "num",
  "num-bigint-dig",
- "oo7-daemon",
+ "oo8-daemon",
  "oo7-macros",
  "openssl",
  "pbkdf2",
@@ -1162,7 +1162,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oo7-cli"
+name = "oo8-cli"
 version = "0.7.0-alpha"
 dependencies = [
  "anstyle",
@@ -1181,7 +1181,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oo7-daemon"
+name = "oo8-daemon"
 version = "0.7.0-alpha"
 dependencies = [
  "ashpd",
@@ -1238,7 +1238,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oo7-portal"
+name = "oo8-portal"
 version = "0.7.0-alpha"
 dependencies = [
  "ashpd",
