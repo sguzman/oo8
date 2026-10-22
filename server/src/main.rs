@@ -26,6 +26,7 @@ use std::{
 use clap::Parser;
 use rustix::net::{RecvAncillaryBuffer, RecvAncillaryMessage, RecvFlags};
 use service::Service;
+use tokio_stream::StreamExt;
 
 use crate::error::Error;
 
@@ -126,6 +127,33 @@ async fn read_secret_from_credentials_directory() -> Option<oo7::Secret> {
     }
 }
 
+/// Exit when another connection takes ownership of the Secret Service name.
+///
+/// Losing a well-known D-Bus name does not close a process's bus connection,
+/// so waiting on `connection.closed()` alone leaves a displaced daemon alive.
+/// Subscribe before querying current ownership to cover the handoff race.
+async fn wait_for_name_loss(connection: &zbus::Connection) -> Result<(), Error> {
+    let bus = zbus::fdo::DBusProxy::new(connection).await?;
+    let mut signals = bus
+        .receive_name_lost_with_args(&[(0, "org.freedesktop.secrets")])
+        .await?;
+
+    let service_name = zbus::names::BusName::try_from("org.freedesktop.secrets")
+        .expect("valid static Secret Service bus name");
+    let our_name = connection
+        .unique_name()
+        .ok_or_else(|| std::io::Error::other("Session D-Bus connection lacks a unique name"))?;
+
+    // Recheck after installing the match rule, since replacement might have
+    // occurred before this monitor was initially polled.
+    if bus.get_name_owner(service_name).await.ok().as_ref() != Some(our_name) {
+        return Ok(());
+    }
+
+    let _ = signals.next().await;
+    Ok(())
+}
+
 async fn inner_main(args: Args) -> Result<(), Error> {
     #[cfg(target_os = "linux")]
     capability::drop_unnecessary_capabilities()?;
@@ -175,6 +203,10 @@ async fn inner_main(args: Args) -> Result<(), Error> {
 
     tokio::select! {
         _ = connection.closed() => tracing::info!("D-Bus connection lost, shutting down"),
+        result = wait_for_name_loss(&connection) => {
+            result?;
+            tracing::info!("Secret Service name was replaced, shutting down displaced daemon");
+        },
         _ = tokio::signal::ctrl_c() => tracing::info!("Received SIGINT, shutting down"),
         _ = sigterm.recv() => tracing::info!("Received SIGTERM, shutting down"),
     }
