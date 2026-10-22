@@ -227,11 +227,23 @@ fn send_secret_to_helper_pipe(write_fd: RawFd, secret: &[u8]) -> io::Result<()> 
     writer.write_all(secret)
 }
 
+// Auto-start must enforce the same limit as the helper's stdin reader.
+fn checked_login_helper_secret(secret: &[u8]) -> Result<(), SocketError> {
+    if secret.is_empty() || secret.len() > MAX_PAM_FRAME_BYTES {
+        return Err(SocketError::Send(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Login helper secret is empty or exceeds maximum accepted length",
+        )));
+    }
+    Ok(())
+}
+
 /// Start the oo7-daemon-login helper, passing the secret via stdin pipe.
 ///
 /// The helper holds the secret on a socket until oo7-daemon connects and
 /// retrieves it via memfd.
 fn start_login_helper(secret: &[u8]) -> Result<(), SocketError> {
+    checked_login_helper_secret(secret)?;
     tracing::info!("Starting oo7-daemon-login helper");
 
     let mut pipe_fds = [0 as libc::c_int; 2];
@@ -405,6 +417,19 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn login_helper_rejects_empty_and_oversized_credentials() {
+        assert!(matches!(
+            checked_login_helper_secret(&[]),
+            Err(SocketError::Send(e)) if e.kind() == io::ErrorKind::InvalidData
+        ));
+        assert!(matches!(
+            checked_login_helper_secret(&vec![2u8; MAX_PAM_FRAME_BYTES + 1]),
+            Err(SocketError::Send(e)) if e.kind() == io::ErrorKind::InvalidData
+        ));
+        assert!(checked_login_helper_secret(&vec![2u8; MAX_PAM_FRAME_BYTES]).is_ok());
+    }
 
     #[test]
     fn helper_pipe_receives_complete_secret() -> Result<(), Box<dyn std::error::Error>> {
