@@ -18,7 +18,7 @@ use crate::protocol::{PamMessage, PamResponse};
 const SOCKET_TIMEOUT_MS: u64 = 5000;
 
 // Both request and response frames contain only short credentials and status.
- // Reject client/server-controlled lengths before allocating buffers.
+// Reject client/server-controlled lengths before allocating buffers.
 const MAX_PAM_FRAME_BYTES: usize = 64 * 1024;
 
 fn checked_pam_frame_length(length: usize) -> Result<u32, SocketError> {
@@ -30,7 +30,10 @@ fn checked_pam_frame_length(length: usize) -> Result<u32, SocketError> {
     }
 
     u32::try_from(length).map_err(|_| {
-        SocketError::Send(io::Error::new(io::ErrorKind::InvalidData, "PAM frame length overflow"))
+        SocketError::Send(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "PAM frame length overflow",
+        ))
     })
 }
 
@@ -374,8 +377,8 @@ async fn send_secret_to_daemon_async(
     .await
     {
         Ok(Ok(_)) => {
-            let length = checked_pam_frame_length(u32::from_le_bytes(length_bytes) as usize)?
-                as usize;
+            let length =
+                checked_pam_frame_length(u32::from_le_bytes(length_bytes) as usize)? as usize;
             let mut response_bytes = vec![0u8; length];
             if let Ok(Ok(_)) = timeout(
                 Duration::from_millis(SOCKET_TIMEOUT_MS),

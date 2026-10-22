@@ -347,8 +347,8 @@ async fn message_serialization() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn pam_rejects_invalid_frame_lengths_before_allocation(
-) -> Result<(), Box<dyn std::error::Error>> {
+async fn pam_rejects_invalid_frame_lengths_before_allocation()
+-> Result<(), Box<dyn std::error::Error>> {
     use tokio::{
         io::AsyncWriteExt,
         time::{Duration, timeout},
@@ -358,7 +358,8 @@ async fn pam_rejects_invalid_frame_lengths_before_allocation(
         let (mut client, mut server) = tokio::net::UnixStream::pair()?;
         client.write_all(&length.to_le_bytes()).await?;
 
-        // A rejected header must not wait for a body or allocate its claimed length.
+        // A rejected header must not wait for a body or allocate its claimed
+        // length.
         let result = timeout(Duration::from_secs(1), read_pam_message(&mut server)).await?;
         assert!(
             matches!(&result, Err(Error::IO(err)) if err.kind() == std::io::ErrorKind::InvalidData),

@@ -30,7 +30,9 @@ async fn read_pam_message(stream: &mut UnixStream) -> Result<PamMessage, Error> 
     if message_length == 0 || message_length > MAX_PAM_MESSAGE_BYTES {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!("Invalid PAM message length {message_length} (maximum {MAX_PAM_MESSAGE_BYTES})"),
+            format!(
+                "Invalid PAM message length {message_length} (maximum {MAX_PAM_MESSAGE_BYTES})"
+            ),
         )
         .into());
     }
