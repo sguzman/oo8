@@ -45,6 +45,7 @@ for ((run = 1; run <= iterations; run++)); do
 
     XDG_DATA_HOME="$case_dir/data" \
     CREDENTIALS_DIRECTORY="$case_dir/credentials" \
+    OO7_PAM_SOCKET="$case_dir/pam.sock" \
         "$daemon" > "$case_dir/daemon.log" 2>&1 &
     daemon_pid=$!
 

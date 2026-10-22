@@ -36,6 +36,8 @@ Full procedure: [Soar and systemd setup](packaging/soar/README.md).
 - [Soar declarative package fragment](packaging/soar/packages.toml)
 - [User service template](packaging/soar/oo7-daemon.service)
 - [Independent GitHub release builder](.github/workflows/oo8-soar.yml)
+- [First-trial dogfood gates](DOGFOOD.md)
+- [Isolated exact-archive canary](tests/oo8-archive-canary.sh)
 - [Reproducible isolated D-Bus startup regression](tests/oo8-startup-race.sh)
 - [Maintenance and rollout policy](OO8.md)
 - [Download releases](https://github.com/sguzman/oo8/releases)

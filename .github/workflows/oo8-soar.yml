@@ -81,6 +81,10 @@ jobs:
           tar -tzf oo8-x86_64-linux.tar.gz | grep -Fx 'bin/oo7-daemon'
           tar -tzf oo8-x86_64-linux.tar.gz | grep -Fx 'bin/oo7-portal'
           sha256sum oo8-x86_64-linux.tar.gz > oo8-x86_64-linux.tar.gz.sha256
+      - name: Exercise assembled archive in disposable sessions
+        run: |
+          runuser -u oo8ci -- bash "$GITHUB_WORKSPACE/tests/oo8-archive-canary.sh" \
+            "$GITHUB_WORKSPACE/dist/oo8-x86_64-linux.tar.gz"
       - name: Save development archive for review
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
