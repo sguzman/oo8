@@ -132,6 +132,11 @@ wait_pam primary "$active_pid"
 printf '%s\n' "$secret" | "$cli" store "oo8 concurrent stress" "$attribute" \
     || fail "could not write seed secret"
 [[ "$(get_secret)" == "$secret" ]] || fail "seed secret is not readable"
+# Machine-readable stdout must remain clean even with diagnostic logging.
+verbose_result="$(timeout 4s "$cli" --verbose lookup --secret-only "$attribute" \
+    2>"$sandbox/cli-verbose.log")" || fail "verbose secret lookup failed"
+[[ "$verbose_result" == "$secret" ]] \
+    || fail "verbose CLI polluted machine-readable stdout"
 
 # Readers race with each successive handoff. Transient failures during the
 # name transfer are permissible; a successful response with a WRONG secret is
