@@ -35,8 +35,9 @@ async fn read_pam_message(stream: &mut UnixStream) -> Result<PamMessage, Error> 
         .into());
     }
 
-    let mut message_bytes = vec![0u8; message_length];
-    stream.read_exact(&mut message_bytes).await?;
+    // The serialized frame contains plaintext credentials; wipe it on drop.
+    let mut message_bytes = zeroize::Zeroizing::new(vec![0u8; message_length]);
+    stream.read_exact(message_bytes.as_mut_slice()).await?;
 
     PamMessage::from_bytes(&message_bytes)
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string()).into())
