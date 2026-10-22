@@ -79,6 +79,7 @@ pub enum SocketError {
     Serialize(zgvariant::Error),
     Timeout,
     InvalidSocket(String),
+    Rejected(String),
 }
 
 impl std::fmt::Display for SocketError {
@@ -89,6 +90,7 @@ impl std::fmt::Display for SocketError {
             Self::Serialize(e) => write!(f, "Failed to serialize message: {e}"),
             Self::Timeout => write!(f, "Operation timed out"),
             Self::InvalidSocket(msg) => write!(f, "Invalid socket: {msg}"),
+            Self::Rejected(reason) => write!(f, "Daemon rejected PAM request: {reason}"),
         }
     }
 }
@@ -98,7 +100,7 @@ impl std::error::Error for SocketError {
         match self {
             Self::Connect(e) | Self::Send(e) => Some(e),
             Self::Serialize(e) => Some(e),
-            Self::Timeout | Self::InvalidSocket(_) => None,
+            Self::Timeout | Self::InvalidSocket(_) | Self::Rejected(_) => None,
         }
     }
 }
@@ -369,47 +371,40 @@ async fn send_secret_to_daemon_async(
 
     tracing::debug!("Sent message to daemon, reading response");
 
-    let mut length_bytes = [0u8; 4];
-    match timeout(
-        Duration::from_millis(SOCKET_TIMEOUT_MS),
-        stream.read_exact(&mut length_bytes),
-    )
-    .await
-    {
-        Ok(Ok(_)) => {
-            let length =
-                checked_pam_frame_length(u32::from_le_bytes(length_bytes) as usize)? as usize;
-            let mut response_bytes = vec![0u8; length];
-            if let Ok(Ok(_)) = timeout(
-                Duration::from_millis(SOCKET_TIMEOUT_MS),
-                stream.read_exact(&mut response_bytes),
-            )
+    // Sending credentials is not proof of acceptance. Read the entire
+    // acknowledgment under one deadline, including its length and body.
+    let response = timeout(Duration::from_millis(SOCKET_TIMEOUT_MS), async {
+        let mut length_bytes = [0u8; 4];
+        stream
+            .read_exact(&mut length_bytes)
             .await
-            {
-                match PamResponse::from_bytes(&response_bytes) {
-                    Ok(response) if response.success => {
-                        tracing::debug!("Daemon accepted secret");
-                    }
-                    Ok(response) => {
-                        tracing::warn!("Daemon rejected secret: {}", response.error_message);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to parse daemon response: {e}");
-                    }
-                }
-            }
-        }
-        _ => {
-            tracing::debug!("No response from daemon");
-        }
-    }
+            .map_err(SocketError::Send)?;
+        let length = checked_pam_frame_length(u32::from_le_bytes(length_bytes) as usize)? as usize;
+        let mut response_bytes = vec![0u8; length];
+        stream
+            .read_exact(&mut response_bytes)
+            .await
+            .map_err(SocketError::Send)?;
+        PamResponse::from_bytes(&response_bytes).map_err(SocketError::Serialize)
+    })
+    .await
+    .map_err(|_| SocketError::Timeout)??;
 
-    Ok(())
+    if response.success {
+        tracing::debug!("Daemon accepted secret");
+        Ok(())
+    } else {
+        tracing::warn!("Daemon rejected secret: {}", response.error_message);
+        Err(SocketError::Rejected(response.error_message))
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use tokio::{io::AsyncReadExt, net::UnixListener};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::UnixListener,
+    };
 
     use super::*;
 
@@ -433,6 +428,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rejected_daemon_reply_fails() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let socket = directory.path().join("rejected.sock");
+        let listener = UnixListener::bind(&socket)?;
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut length = [0u8; 4];
+            stream.read_exact(&mut length).await.unwrap();
+            let mut request = vec![0u8; u32::from_le_bytes(length) as usize];
+            stream.read_exact(&mut request).await.unwrap();
+            let reply = PamResponse {
+                success: false,
+                error_message: "keyring locked".into(),
+            };
+            let context = zgvariant::serialized::Context::new(zgvariant::LE, 0);
+            let bytes = zgvariant::to_bytes(context, &reply).unwrap().to_vec();
+            stream.write_all(&(bytes.len() as u32).to_le_bytes()).await.unwrap();
+            stream.write_all(&bytes).await.unwrap();
+        });
+        let uid = unsafe { libc::getuid() };
+        let message = PamMessage::unlock("testuser".into(), b"testpassword".to_vec());
+        let result = send_secret_to_daemon_async(message, uid, false, Some(socket)).await;
+        assert!(
+            matches!(result, Err(SocketError::Rejected(reason)) if reason == "keyring locked"),
+            "Daemon rejection must not be interpreted as success"
+        );
+        server.await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn missing_acknowledgment_fails() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let socket = directory.path().join("missing-ack.sock");
+        let listener = UnixListener::bind(&socket)?;
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut length = [0u8; 4];
+            stream.read_exact(&mut length).await.unwrap();
+            let mut request = vec![0u8; u32::from_le_bytes(length) as usize];
+            stream.read_exact(&mut request).await.unwrap();
+            // Drop without a response.
+        });
+        let uid = unsafe { libc::getuid() };
+        let message = PamMessage::unlock("testuser".into(), b"testpassword".to_vec());
+        let result = send_secret_to_daemon_async(message, uid, false, Some(socket)).await;
+        assert!(
+            matches!(result, Err(SocketError::Send(_))),
+            "Missing daemon acknowledgment must not be interpreted as success"
+        );
+        server.await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_send_receive() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = tempfile::tempdir()?;
         let socket_path = temp_dir.path().join("test.sock");
@@ -452,6 +502,18 @@ mod tests {
             let message = PamMessage::from_bytes(&message_bytes).unwrap();
             assert_eq!(message.username, "testuser");
             assert_eq!(message.new_secret, b"testpassword");
+
+            let reply = PamResponse {
+                success: true,
+                error_message: String::new(),
+            };
+            let context = zgvariant::serialized::Context::new(zgvariant::LE, 0);
+            let bytes = zgvariant::to_bytes(context, &reply).unwrap().to_vec();
+            stream
+                .write_all(&(bytes.len() as u32).to_le_bytes())
+                .await
+                .unwrap();
+            stream.write_all(&bytes).await.unwrap();
         });
 
         tokio::time::sleep(Duration::from_millis(100)).await;

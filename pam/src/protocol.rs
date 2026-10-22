@@ -53,7 +53,7 @@ impl PamMessage {
     }
 }
 
-#[derive(Debug, Deserialize, Type)]
+#[derive(Debug, Serialize, Deserialize, Type)]
 pub struct PamResponse {
     pub success: bool,
     pub error_message: String,
