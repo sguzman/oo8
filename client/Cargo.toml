@@ -47,7 +47,7 @@ zbus.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
-oo7-daemon = { path = "../server", features = ["test-util"], default-features = false }
+oo8-daemon = { path = "../server", features = ["test-util"], default-features = false }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }

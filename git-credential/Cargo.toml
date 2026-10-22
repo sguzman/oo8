@@ -1,6 +1,6 @@
 [package]
 autobins = false
-name = "git-credential-oo7"
+name = "git-credential-oo8"
 description = "Git credential helper using oo7"
 version.workspace = true
 edition.workspace = true

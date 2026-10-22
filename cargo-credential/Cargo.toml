@@ -1,6 +1,6 @@
 [package]
 autobins = false
-name = "cargo-credential-oo7"
+name = "cargo-credential-oo8"
 description = "Cargo credential provider using oo7"
 version.workspace = true
 edition.workspace = true

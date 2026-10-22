@@ -1,6 +1,6 @@
 [package]
 autobins = false
-name = "oo7-cli"
+name = "oo8-cli"
 description = "System keyring access from the terminal"
 authors.workspace = true
 categories.workspace = true

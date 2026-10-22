@@ -1,6 +1,6 @@
 [package]
 autobins = false
-name = "oo7-portal"
+name = "oo8-portal"
 authors.workspace = true
 categories.workspace = true
 keywords.workspace = true
