@@ -67,7 +67,7 @@ jobs:
         run: |
           cargo build --manifest-path ./portal/Cargo.toml
 
-      - name: Build git-credential-oo7
+      - name: Build git-credential-oo8
         run: |
           cargo build --manifest-path ./git-credential/Cargo.toml
 
