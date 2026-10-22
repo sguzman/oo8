@@ -883,7 +883,7 @@ async fn pam_partial_unlock_reports_failure_then_recovers() -> Result<(), Box<dy
 }
 
 #[tokio::test]
-async fn pam_partial_password_change_preserves_both_keyrings()
+async fn pam_mixed_old_passwords_reject_without_partial_change()
 -> Result<(), Box<dyn std::error::Error>> {
     let temp = tempfile::tempdir()?;
     create_persistent_pam_test_keyring(temp.path(), "alpha", "old-alpha-password").await?;
@@ -919,7 +919,7 @@ async fn pam_partial_password_change_preserves_both_keyrings()
         partial.is_err(),
         "A change that fails on another persistent keyring is incomplete"
     );
-    assert!(alpha.is_locked().await, "Changed keyring was left unlocked");
+    assert!(alpha.is_locked().await, "Preflight unexpectedly unlocked Alpha");
     assert!(
         beta.is_locked().await,
         "Unmatched keyring was left unlocked"
@@ -927,17 +927,61 @@ async fn pam_partial_password_change_preserves_both_keyrings()
 
     assert!(
         alpha
-            .set_locked(false, Some(Secret::from("old-alpha-password")))
+            .set_locked(false, Some(Secret::from("new-alpha-password")))
             .await
             .is_err(),
-        "Old Alpha password unexpectedly still works"
+        "Rejected change unexpectedly updated Alpha's password"
     );
     alpha
-        .set_locked(false, Some(Secret::from("new-alpha-password")))
+        .set_locked(false, Some(Secret::from("old-alpha-password")))
         .await?;
     beta.set_locked(false, Some(Secret::from("beta-password")))
         .await?;
     assert!(!alpha.is_locked().await);
     assert!(!beta.is_locked().await);
+    Ok(())
+}
+
+#[tokio::test]
+async fn pam_changes_multiple_keyrings_when_every_old_password_matches()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    create_persistent_pam_test_keyring(temp.path(), "alpha", "shared-old-password").await?;
+    create_persistent_pam_test_keyring(temp.path(), "beta", "shared-old-password").await?;
+    let setup = crate::tests::TestServiceSetup::with_disk_keyrings(
+        temp.path().to_path_buf(),
+        Some(temp.path().join("pam-shared-password-change.sock")),
+        None,
+    )
+    .await?;
+    let listener = PamListener::new(setup.server.clone());
+
+    let count = listener
+        .change_collection_passwords(
+            &Secret::from("shared-old-password"),
+            &Secret::from("shared-new-password"),
+        )
+        .await?;
+    assert_eq!(count, 2, "Both persistent keyrings must be updated");
+
+    let collections = setup.server.collections.lock().await;
+    let mut checked = 0;
+    for collection in collections.values() {
+        if collection.label().await == "Alpha" || collection.label().await == "Beta" {
+            checked += 1;
+            assert!(collection.is_locked().await, "Password change left keyring unlocked");
+            assert!(
+                collection
+                    .set_locked(false, Some(Secret::from("shared-old-password")))
+                    .await
+                    .is_err(),
+                "Old password unexpectedly still unlocks changed keyring"
+            );
+            collection
+                .set_locked(false, Some(Secret::from("shared-new-password")))
+                .await?;
+        }
+    }
+    assert_eq!(checked, 2);
     Ok(())
 }

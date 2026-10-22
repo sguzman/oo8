@@ -455,6 +455,49 @@ impl PamListener {
         new_secret: &Secret,
     ) -> Result<usize, Error> {
         let collections = self.service.collections.lock().await;
+        // Check every persistent keyring before modifying any password.
+        // Otherwise one mismatched old password can leave several keyrings
+        // using different passwords after PAM reports an overall failure.
+        // This preflight cannot make filesystem writes transactional, but it
+        // prevents predictable partial changes from invalid credentials.
+        let mut eligible = 0;
+        for (path, collection) in collections.iter() {
+            if collection.alias().await == oo7::dbus::Service::SESSION_COLLECTION {
+                continue;
+            }
+            let guard = collection.keyring.read().await;
+            let Some(keyring) = guard.as_ref() else {
+                continue;
+            };
+            let matches_old = match keyring {
+                oo7::file::Keyring::Locked(locked) => locked.validate_secret(old_secret).await,
+                oo7::file::Keyring::Unlocked(unlocked) => {
+                    unlocked.validate_secret(old_secret).await
+                }
+            };
+            match matches_old {
+                Ok(true) => eligible += 1,
+                Ok(false) => {
+                    return Err(std::io::Error::other(format!(
+                        "PAM password change rejected: old password does not match collection {path}"
+                    ))
+                    .into());
+                }
+                Err(e) => {
+                    return Err(std::io::Error::other(format!(
+                        "PAM password change could not validate collection {path}: {e}"
+                    ))
+                    .into());
+                }
+            }
+        }
+        if eligible == 0 {
+            return Err(std::io::Error::other(
+                "PAM password change did not find any persistent keyrings",
+            )
+            .into());
+        }
+
         let mut changed_count = 0;
         let mut failed_count = 0;
 
