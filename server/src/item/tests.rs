@@ -538,11 +538,15 @@ async fn locked_item_operations() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn failed_item_decryption_preserves_locked_item()
--> Result<(), Box<dyn std::error::Error>> {
+async fn failed_item_decryption_preserves_locked_item() -> Result<(), Box<dyn std::error::Error>> {
     let setup = TestServiceSetup::plain_session(true).await?;
     let item = setup
-        .create_item("Preserved Item", &[("app", "failure-recovery")], "test-secret", false)
+        .create_item(
+            "Preserved Item",
+            &[("app", "failure-recovery")],
+            "test-secret",
+            false,
+        )
         .await?;
 
     let collection = {
@@ -570,10 +574,9 @@ async fn failed_item_decryption_preserves_locked_item()
 
     // An unrelated keyring cannot decrypt it. A failed conversion must not
     // empty the item slot or permanently discard the encrypted value.
-    let unrelated = oo7::file::UnlockedKeyring::temporary(
-        oo7::Secret::from("unrelated-disposable-password"),
-    )
-    .await?;
+    let unrelated =
+        oo7::file::UnlockedKeyring::temporary(oo7::Secret::from("unrelated-disposable-password"))
+            .await?;
     assert!(server_item.set_locked(false, &unrelated).await.is_err());
     assert!(
         server_item.inner.lock().await.is_some(),
@@ -616,15 +619,17 @@ async fn item_decryption_failure_preserves_unlocked_collection()
 
     // Deliberately encrypt the item with the wrong key while the parent
     // keyring still uses the original credential.
-    let unrelated = oo7::file::UnlockedKeyring::temporary(
-        oo7::Secret::from("unrelated-disposable-password"),
-    )
-    .await?;
+    let unrelated =
+        oo7::file::UnlockedKeyring::temporary(oo7::Secret::from("unrelated-disposable-password"))
+            .await?;
     server_item.set_locked(true, &unrelated).await?;
     collection.set_locked(true, None).await?;
     assert!(collection.is_locked().await);
 
-    let correct = setup.keyring_secret.as_ref().expect("Missing test keyring secret");
+    let correct = setup
+        .keyring_secret
+        .as_ref()
+        .expect("Missing test keyring secret");
     assert!(
         collection
             .set_locked(false, Some(correct.clone()))

@@ -379,12 +379,13 @@ impl Item {
                     Some(oo7::file::Item::Locked(locked_item))
                 }
                 (oo7::file::Item::Locked(locked_item), false) => {
-                    let unlocked = keyring
-                        .unlock_item(locked_item.clone())
-                        .await
-                        .map_err(|err| {
-                            custom_service_error(&format!("Failed to unlock item: {err}"))
-                        })?;
+                    let unlocked =
+                        keyring
+                            .unlock_item(locked_item.clone())
+                            .await
+                            .map_err(|err| {
+                                custom_service_error(&format!("Failed to unlock item: {err}"))
+                            })?;
                     Some(oo7::file::Item::Unlocked(unlocked))
                 }
                 _ => None,

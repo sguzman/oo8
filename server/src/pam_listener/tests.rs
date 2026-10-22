@@ -783,7 +783,10 @@ async fn wrong_unlock_preserves_keyring_without_backing_file()
         }
         work.expect("Work collection missing")
     };
-    assert!(work.is_locked().await, "Test starts with a locked collection");
+    assert!(
+        work.is_locked().await,
+        "Test starts with a locked collection"
+    );
 
     // Simulate a missing/unreadable backing file. The incorrect password
     // must not consume the live in-memory keyring and leave an empty slot.
@@ -804,7 +807,10 @@ async fn wrong_unlock_preserves_keyring_without_backing_file()
     // The same in-memory encrypted keyring must still accept its original
     // credential even though the disposable backing file was removed.
     work.set_locked(false, Some(correct)).await?;
-    assert!(!work.is_locked().await, "Valid retry did not unlock the keyring");
+    assert!(
+        !work.is_locked().await,
+        "Valid retry did not unlock the keyring"
+    );
     Ok(())
 }
 
@@ -827,8 +833,8 @@ async fn create_persistent_pam_test_keyring(
 }
 
 #[tokio::test]
-async fn pam_partial_unlock_reports_failure_then_recovers()
--> Result<(), Box<dyn std::error::Error>> {
+async fn pam_partial_unlock_reports_failure_then_recovers() -> Result<(), Box<dyn std::error::Error>>
+{
     let temp = tempfile::tempdir()?;
     create_persistent_pam_test_keyring(temp.path(), "alpha", "alpha-password").await?;
     create_persistent_pam_test_keyring(temp.path(), "beta", "beta-password").await?;
@@ -859,8 +865,14 @@ async fn pam_partial_unlock_reports_failure_then_recovers()
         .try_unlock_collections(&Secret::from("alpha-password"))
         .await;
     assert!(partial.is_err(), "Partial unlock must not return success");
-    assert!(!alpha.is_locked().await, "Matching collection should unlock");
-    assert!(beta.is_locked().await, "Wrong password must leave Beta locked");
+    assert!(
+        !alpha.is_locked().await,
+        "Matching collection should unlock"
+    );
+    assert!(
+        beta.is_locked().await,
+        "Wrong password must leave Beta locked"
+    );
 
     listener
         .try_unlock_collections(&Secret::from("beta-password"))
@@ -908,7 +920,10 @@ async fn pam_partial_password_change_preserves_both_keyrings()
         "A change that fails on another persistent keyring is incomplete"
     );
     assert!(alpha.is_locked().await, "Changed keyring was left unlocked");
-    assert!(beta.is_locked().await, "Unmatched keyring was left unlocked");
+    assert!(
+        beta.is_locked().await,
+        "Unmatched keyring was left unlocked"
+    );
 
     assert!(
         alpha
@@ -920,8 +935,7 @@ async fn pam_partial_password_change_preserves_both_keyrings()
     alpha
         .set_locked(false, Some(Secret::from("new-alpha-password")))
         .await?;
-    beta
-        .set_locked(false, Some(Secret::from("beta-password")))
+    beta.set_locked(false, Some(Secret::from("beta-password")))
         .await?;
     assert!(!alpha.is_locked().await);
     assert!(!beta.is_locked().await);

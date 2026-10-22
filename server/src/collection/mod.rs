@@ -578,7 +578,9 @@ impl Collection {
             match valid {
                 Ok(true) => {}
                 Ok(false) => {
-                    return Err(custom_service_error("Failed to unlock keyring: incorrect secret"));
+                    return Err(custom_service_error(
+                        "Failed to unlock keyring: incorrect secret",
+                    ));
                 }
                 Err(err) => {
                     return Err(custom_service_error(&format!(
