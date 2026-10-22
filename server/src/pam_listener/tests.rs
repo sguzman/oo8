@@ -600,6 +600,30 @@ async fn pam_rejects_wrong_unlock_and_accepts_correct_retry()
         }
     }
 
+    // Exercise the real PAM socket and acknowledgment as well as the
+    // internal result, so the client cannot mistake a rejected password
+    // for a completed unlock.
+    let server = listener.clone();
+    let worker = tokio::spawn(async move {
+        let _ = server.start().await;
+    });
+    tokio::time::timeout(tokio::time::Duration::from_secs(2), async {
+        while !socket.exists() {
+            tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await?;
+    let invalid_frame =
+        create_pam_message(PamOperation::Unlock, "testuser", &[], wrong.as_bytes());
+    assert!(
+        send_pam_message(&socket, &invalid_frame).await.is_err(),
+        "PAM socket acknowledged a rejected password"
+    );
+    let valid_frame =
+        create_pam_message(PamOperation::Unlock, "testuser", &[], correct.as_bytes());
+    send_pam_message(&socket, &valid_frame).await?;
+    worker.abort();
+
     listener.try_unlock_collections(&correct).await?;
     {
         let collections = setup.server.collections.lock().await;
