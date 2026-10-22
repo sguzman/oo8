@@ -71,7 +71,7 @@ owner() {
     dbus-send --session --print-reply --reply-timeout=700 \
         --dest=org.freedesktop.DBus /org/freedesktop/DBus \
         org.freedesktop.DBus.GetNameOwner string:org.freedesktop.secrets \
-        2>/dev/null | sed -n 's/.*string "\([^"]*\)".*/\1/p' | head -1
+        2>/dev/null | sed -n 's/.*string "\([^"]*\)".*/\1/p' | head -1 || true
 }
 wait_owner() {
     local former="$1" pid="$2" current
