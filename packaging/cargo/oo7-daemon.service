@@ -14,18 +14,14 @@ TimeoutStartSec=30s
 TimeoutStopSec=30s
 ImportCredential=oo7.keyring-encryption-password
 StandardError=journal
+# Use restrictions that can run in a non-root systemd --user manager.
+# Kernel/module/device capability masks require user namespaces on some hosts
+# and can prevent the service from starting (218/CAPABILITIES).
 NoNewPrivileges=true
-SupplementaryGroups=
-PrivateUsers=yes
 ProtectSystem=full
 PrivateTmp=true
-PrivateDevices=true
 PrivateNetwork=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
 MemoryDenyWriteExecute=true
-ProtectClock=true
 
 [Install]
 WantedBy=default.target

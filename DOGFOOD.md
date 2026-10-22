@@ -46,6 +46,13 @@ Rollback: stop the new service, restore/remove only the oo8 user unit
 override, reload the user manager and restore the previous service.
 Do not delete or recreate encrypted keyrings during rollback.
 
+The shipped Soar and Cargo user-service units deliberately avoid
+capability-dropping directives that can fail with `218/CAPABILITIES` inside
+unprivileged systemd managers. Restrictions retained in the unit are subject
+to host kernel namespace support; verify their effective behavior on the
+target computer separately. The CI disposable systemd test exercises the
+actual Soar template, rather than assuming a transient unit is equivalent.
+
 ## Gate 2: follow-on compatibility
 
 Privileged PAM installation, portal registration, and the coordinated
