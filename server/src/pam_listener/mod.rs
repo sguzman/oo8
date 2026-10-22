@@ -472,13 +472,13 @@ impl PamListener {
             if was_locked
                 && let Err(e) = collection.set_locked(false, Some(old_secret.clone())).await
             {
-                    tracing::warn!(
-                        "Failed to unlock collection {} with old password: {}",
-                        path,
-                        e
-                    );
-                    failed_count += 1;
-                    continue;
+                tracing::warn!(
+                    "Failed to unlock collection {} with old password: {}",
+                    path,
+                    e
+                );
+                failed_count += 1;
+                continue;
             }
 
             // Re-locking must happen after this scope, even if password
@@ -513,12 +513,12 @@ impl PamListener {
             }
 
             if was_locked && let Err(e) = collection.set_locked(true, None).await {
-                    failed_count += 1;
-                    tracing::warn!(
-                        "Failed to restore lock state for collection {}: {}",
-                        path,
-                        e
-                    );
+                failed_count += 1;
+                tracing::warn!(
+                    "Failed to restore lock state for collection {}: {}",
+                    path,
+                    e
+                );
             }
         }
 
