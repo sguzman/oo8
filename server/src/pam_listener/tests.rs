@@ -624,6 +624,15 @@ async fn pam_rejects_wrong_unlock_and_accepts_correct_retry()
         send_pam_message(&socket, &invalid_frame).await.is_err(),
         "PAM socket acknowledged a rejected password"
     );
+    assert!(
+        !listener
+            .user_secrets
+            .read()
+            .await
+            .as_ref()
+            .is_some_and(|buffered| buffered.contains_key("testuser")),
+        "Rejected credential must not be buffered for replay"
+    );
     let valid_frame = create_pam_message(PamOperation::Unlock, "testuser", &[], correct.as_bytes());
     send_pam_message(&socket, &valid_frame).await?;
     worker.abort();
@@ -796,5 +805,125 @@ async fn wrong_unlock_preserves_keyring_without_backing_file()
     // credential even though the disposable backing file was removed.
     work.set_locked(false, Some(correct)).await?;
     assert!(!work.is_locked().await, "Valid retry did not unlock the keyring");
+    Ok(())
+}
+
+async fn create_persistent_pam_test_keyring(
+    dir: &std::path::Path,
+    name: &str,
+    password: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let keyring = UnlockedKeyring::open_at(dir, name, Some(Secret::from(password))).await?;
+    keyring
+        .create_item(
+            "Mixed Credential Item",
+            &[("kind", name)],
+            Secret::text("disposable-secret"),
+            false,
+        )
+        .await?;
+    keyring.write().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn pam_partial_unlock_reports_failure_then_recovers()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    create_persistent_pam_test_keyring(temp.path(), "alpha", "alpha-password").await?;
+    create_persistent_pam_test_keyring(temp.path(), "beta", "beta-password").await?;
+    let setup = crate::tests::TestServiceSetup::with_disk_keyrings(
+        temp.path().to_path_buf(),
+        Some(temp.path().join("pam-partial-unlock.sock")),
+        None,
+    )
+    .await?;
+    let listener = PamListener::new(setup.server.clone());
+    let (alpha, beta) = {
+        let collections = setup.server.collections.lock().await;
+        let mut alpha = None;
+        let mut beta = None;
+        for collection in collections.values() {
+            if collection.label().await == "Alpha" {
+                alpha = Some(collection.clone());
+            } else if collection.label().await == "Beta" {
+                beta = Some(collection.clone());
+            }
+        }
+        (alpha.expect("Alpha missing"), beta.expect("Beta missing"))
+    };
+    assert!(alpha.is_locked().await);
+    assert!(beta.is_locked().await);
+
+    let partial = listener
+        .try_unlock_collections(&Secret::from("alpha-password"))
+        .await;
+    assert!(partial.is_err(), "Partial unlock must not return success");
+    assert!(!alpha.is_locked().await, "Matching collection should unlock");
+    assert!(beta.is_locked().await, "Wrong password must leave Beta locked");
+
+    listener
+        .try_unlock_collections(&Secret::from("beta-password"))
+        .await?;
+    assert!(!alpha.is_locked().await);
+    assert!(!beta.is_locked().await);
+    Ok(())
+}
+
+#[tokio::test]
+async fn pam_partial_password_change_preserves_both_keyrings()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    create_persistent_pam_test_keyring(temp.path(), "alpha", "old-alpha-password").await?;
+    create_persistent_pam_test_keyring(temp.path(), "beta", "beta-password").await?;
+    let setup = crate::tests::TestServiceSetup::with_disk_keyrings(
+        temp.path().to_path_buf(),
+        Some(temp.path().join("pam-partial-change.sock")),
+        None,
+    )
+    .await?;
+    let listener = PamListener::new(setup.server.clone());
+    let (alpha, beta) = {
+        let collections = setup.server.collections.lock().await;
+        let mut alpha = None;
+        let mut beta = None;
+        for collection in collections.values() {
+            if collection.label().await == "Alpha" {
+                alpha = Some(collection.clone());
+            } else if collection.label().await == "Beta" {
+                beta = Some(collection.clone());
+            }
+        }
+        (alpha.expect("Alpha missing"), beta.expect("Beta missing"))
+    };
+
+    let partial = listener
+        .change_collection_passwords(
+            &Secret::from("old-alpha-password"),
+            &Secret::from("new-alpha-password"),
+        )
+        .await;
+    assert!(
+        partial.is_err(),
+        "A change that fails on another persistent keyring is incomplete"
+    );
+    assert!(alpha.is_locked().await, "Changed keyring was left unlocked");
+    assert!(beta.is_locked().await, "Unmatched keyring was left unlocked");
+
+    assert!(
+        alpha
+            .set_locked(false, Some(Secret::from("old-alpha-password")))
+            .await
+            .is_err(),
+        "Old Alpha password unexpectedly still works"
+    );
+    alpha
+        .set_locked(false, Some(Secret::from("new-alpha-password")))
+        .await?;
+    beta
+        .set_locked(false, Some(Secret::from("beta-password")))
+        .await?;
+    assert!(!alpha.is_locked().await);
+    assert!(!beta.is_locked().await);
     Ok(())
 }
