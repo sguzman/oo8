@@ -198,9 +198,8 @@ async fn inner_main(args: Args) -> Result<(), Error> {
     let secret = if args.login {
         let mut stdin = std::io::stdin().lock();
         if stdin.is_terminal() {
-            let password = zeroize::Zeroizing::new(rpassword::prompt_password(
-                "Enter the login password: ",
-            )?);
+            let password =
+                zeroize::Zeroizing::new(rpassword::prompt_password("Enter the login password: ")?);
             if password.is_empty() {
                 tracing::error!("Login password can't be empty.");
                 return Err(Error::EmptyPassword);
