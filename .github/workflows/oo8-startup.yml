@@ -35,6 +35,8 @@ jobs:
         run: timeout 120s bash tests/oo8-keyring-lifecycle.sh
       - name: Exercise competing D-Bus owners and handoff
         run: timeout 120s bash tests/oo8-dbus-ownership.sh
+      - name: Exercise intentional replacement of a running Secret Service
+        run: timeout 120s bash tests/oo8-explicit-replace.sh
       - name: Exercise real systemd user service and LoadCredential
         run: |
           sudo timeout 120s bash tests/oo8-systemd-user.sh \
