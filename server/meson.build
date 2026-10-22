@@ -35,7 +35,7 @@ if systemduserunitdir == ''
 endif
 
 libexecdir_conf = configuration_data()
-libexecdir_conf.set('binary', meson.project_name())
+libexecdir_conf.set('binary', 'oo8-daemon')
 libexecdir_conf.set('libexecdir', prefix / libexecdir)
 libexecdir_conf.set('dbus_known_name', dbus_known_name)
 

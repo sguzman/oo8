@@ -35,7 +35,7 @@ conf = configuration_data()
 conf.set('libexecdir', prefix / libexecdir)
 conf.set('dbus_name', dbus_name)
 conf.set('service_name', service_name)
-conf.set('bin_name', meson.project_name())
+conf.set('bin_name', 'oo8-portal')
 
 summary({
   'prefix': prefix,
