@@ -619,14 +619,12 @@ async fn pam_rejects_wrong_unlock_and_accepts_correct_retry()
         }
     })
     .await?;
-    let invalid_frame =
-        create_pam_message(PamOperation::Unlock, "testuser", &[], wrong.as_bytes());
+    let invalid_frame = create_pam_message(PamOperation::Unlock, "testuser", &[], wrong.as_bytes());
     assert!(
         send_pam_message(&socket, &invalid_frame).await.is_err(),
         "PAM socket acknowledged a rejected password"
     );
-    let valid_frame =
-        create_pam_message(PamOperation::Unlock, "testuser", &[], correct.as_bytes());
+    let valid_frame = create_pam_message(PamOperation::Unlock, "testuser", &[], correct.as_bytes());
     send_pam_message(&socket, &valid_frame).await?;
     worker.abort();
 

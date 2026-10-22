@@ -434,7 +434,7 @@ impl PamListener {
             // A partial success is not an all-clear: the PAM client can now
             // distinguish a completely unlocked keyring from a partial state.
             return Err(std::io::Error::other(format!(
-                "PAM unlock incomplete: {unlocked} collection(s) unlocked,                  {failed_unlocks} collection(s) failed,                  {failed_migrations} pending migration(s) unresolved"
+                "PAM unlock incomplete: {unlocked} collection(s) unlocked, {failed_unlocks} collection(s) failed, {failed_migrations} pending migration(s) unresolved"
             ))
             .into());
         }
@@ -469,8 +469,9 @@ impl PamListener {
             let was_locked = keyring.is_locked();
             drop(keyring_guard);
 
-            if was_locked {
-                if let Err(e) = collection.set_locked(false, Some(old_secret.clone())).await {
+            if was_locked
+                && let Err(e) = collection.set_locked(false, Some(old_secret.clone())).await
+            {
                     tracing::warn!(
                         "Failed to unlock collection {} with old password: {}",
                         path,
@@ -478,7 +479,6 @@ impl PamListener {
                     );
                     failed_count += 1;
                     continue;
-                }
             }
 
             // Re-locking must happen after this scope, even if password
@@ -512,21 +512,19 @@ impl PamListener {
                 }
             }
 
-            if was_locked {
-                if let Err(e) = collection.set_locked(true, None).await {
+            if was_locked && let Err(e) = collection.set_locked(true, None).await {
                     failed_count += 1;
                     tracing::warn!(
                         "Failed to restore lock state for collection {}: {}",
                         path,
                         e
                     );
-                }
             }
         }
 
         if failed_count > 0 {
             return Err(std::io::Error::other(format!(
-                "PAM password change incomplete: {changed_count} collection(s) changed,                  {failed_count} operation(s) failed"
+                "PAM password change incomplete: {changed_count} collection(s) changed, {failed_count} operation(s) failed"
             ))
             .into());
         }
