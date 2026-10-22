@@ -585,3 +585,69 @@ async fn failed_item_decryption_preserves_locked_item()
     assert!(!server_item.is_locked().await);
     Ok(())
 }
+
+#[tokio::test]
+async fn item_decryption_failure_preserves_unlocked_collection()
+-> Result<(), Box<dyn std::error::Error>> {
+    let setup = TestServiceSetup::plain_session(true).await?;
+    let item = setup
+        .create_item(
+            "Mixed Key Item",
+            &[("app", "mixed-keys")],
+            "disposable-secret",
+            false,
+        )
+        .await?;
+
+    let collection = {
+        let collections = setup.server.collections.lock().await;
+        let mut found = None;
+        for collection in collections.values() {
+            if collection.alias().await == oo7::dbus::Service::DEFAULT_COLLECTION {
+                found = Some(collection.clone());
+            }
+        }
+        found.expect("Default collection missing")
+    };
+    let server_item = collection
+        .item_from_path(item.inner().path())
+        .await
+        .expect("Server item missing");
+
+    // Deliberately encrypt the item with the wrong key while the parent
+    // keyring still uses the original credential.
+    let unrelated = oo7::file::UnlockedKeyring::temporary(
+        oo7::Secret::from("unrelated-disposable-password"),
+    )
+    .await?;
+    server_item.set_locked(true, &unrelated).await?;
+    collection.set_locked(true, None).await?;
+    assert!(collection.is_locked().await);
+
+    let correct = setup.keyring_secret.as_ref().expect("Missing test keyring secret");
+    assert!(
+        collection
+            .set_locked(false, Some(correct.clone()))
+            .await
+            .is_err(),
+        "A broken item should not produce a successful collection unlock"
+    );
+
+    assert!(
+        collection.keyring.read().await.is_some(),
+        "Failed item conversion discarded the parent keyring"
+    );
+    assert!(
+        server_item.inner.lock().await.is_some(),
+        "Failed item conversion discarded the encrypted item"
+    );
+    assert!(
+        !collection.is_locked().await,
+        "Parent keyring was successfully decrypted but disappeared"
+    );
+    assert!(
+        server_item.is_locked().await,
+        "Undecryptable item should remain locked"
+    );
+    Ok(())
+}
