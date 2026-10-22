@@ -2,8 +2,8 @@
 use std::{
     io::{self, IoSlice, Read},
     mem::MaybeUninit,
-    os::{fd::AsFd, unix::fs::PermissionsExt},
-    path::PathBuf,
+    os::{fd::AsFd, unix::fs::{FileTypeExt, PermissionsExt}},
+    path::{Path, PathBuf},
     sync::LazyLock,
 };
 
@@ -23,6 +23,37 @@ pub static SOCKET_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
     let uid = rustix::process::getuid().as_raw();
     PathBuf::from(format!("/run/user/{uid}/oo7-daemon-login.sock"))
 });
+
+#[cfg(target_os = "linux")]
+fn remove_stale_login_socket(path: &Path) -> io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if !meta.file_type().is_socket() => Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "Existing login-helper path is not a Unix socket",
+        )),
+        Ok(_) => match std::os::unix::net::UnixStream::connect(path) {
+            Ok(_) => Err(io::Error::new(
+                io::ErrorKind::AddrInUse,
+                "Another login helper is already listening",
+            )),
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::ConnectionRefused | io::ErrorKind::NotFound
+                ) =>
+            {
+                match std::fs::remove_file(path) {
+                    Ok(()) => Ok(()),
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+                    Err(e) => Err(e),
+                }
+            }
+            Err(e) => Err(e),
+        },
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
+}
 
 #[cfg(target_os = "linux")]
 fn main() {
@@ -46,7 +77,12 @@ fn main() {
 
     let socket_path = &*SOCKET_PATH;
 
-    let _ = std::fs::remove_file(socket_path);
+    // Never unlink an existing live helper's socket. Two login attempts may
+    // overlap; the later one must not disconnect the first one's secret.
+    remove_stale_login_socket(socket_path).unwrap_or_else(|e| {
+        tracing::error!("Cannot prepare login helper socket {}: {e}", socket_path.display());
+        std::process::exit(1);
+    });
 
     let listener = std::os::unix::net::UnixListener::bind(socket_path).unwrap_or_else(|e| {
         tracing::error!("Failed to bind {}: {e}", socket_path.display());
@@ -160,3 +196,46 @@ fn main() {
 
 #[cfg(not(target_os = "linux"))]
 fn main() {}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn live_login_helper_socket_is_preserved() -> io::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("login.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&path)?;
+        let result = remove_stale_login_socket(&path);
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::AddrInUse);
+        assert!(path.exists(), "Active helper socket was removed");
+        let _client = std::os::unix::net::UnixStream::connect(&path)?;
+        drop(listener);
+        Ok(())
+    }
+
+    #[test]
+    fn stale_login_helper_socket_is_cleaned() -> io::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("stale.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&path)?;
+        drop(listener);
+        assert!(path.exists());
+        remove_stale_login_socket(&path)?;
+        assert!(!path.exists(), "Stale helper socket was not removed");
+        Ok(())
+    }
+
+    #[test]
+    fn regular_file_is_never_deleted_as_login_socket() -> io::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("protected.txt");
+        std::fs::write(&path, b"leave this test file intact")?;
+        assert_eq!(
+            remove_stale_login_socket(&path).unwrap_err().kind(),
+            io::ErrorKind::AlreadyExists
+        );
+        assert_eq!(std::fs::read(&path)?, b"leave this test file intact");
+        Ok(())
+    }
+}
