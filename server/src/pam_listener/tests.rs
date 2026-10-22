@@ -588,14 +588,6 @@ async fn pam_rejects_wrong_unlock_and_accepts_correct_retry()
     )
     .await?;
     let listener = PamListener::new(setup.server.clone());
-    let work = {
-        let collections = setup.server.collections.lock().await;
-        collections
-            .values()
-            .find(|_| false)
-            .cloned()
-    };
-    drop(work);
     let wrong = Secret::from("wrong-unlock-password");
     let result = listener.try_unlock_collections(&wrong).await;
     assert!(result.is_err(), "Wrong unlock password must not report success");
