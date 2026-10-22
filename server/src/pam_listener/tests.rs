@@ -385,3 +385,32 @@ async fn pam_accepts_well_formed_bounded_frame() -> Result<(), Box<dyn std::erro
     assert_eq!(message.new_secret, b"test-password");
     Ok(())
 }
+
+#[tokio::test]
+async fn pam_rejects_stalled_frame_header() -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::{io::AsyncWriteExt, time::Duration};
+
+    let (mut client, mut server) = tokio::net::UnixStream::pair()?;
+    client.write_all(&[1u8, 2u8]).await?;
+    let result = read_pam_message_with_timeout(&mut server, Duration::from_millis(25)).await;
+    assert!(
+        matches!(result, Err(Error::IO(err)) if err.kind() == std::io::ErrorKind::TimedOut),
+        "Stalled frame header must fail with a timeout"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn pam_rejects_stalled_frame_payload() -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::{io::AsyncWriteExt, time::Duration};
+
+    let (mut client, mut server) = tokio::net::UnixStream::pair()?;
+    let message = create_pam_message(PamOperation::Unlock, "tester", &[], b"test-password");
+    client.write_all(&message[..message.len() - 2]).await?;
+    let result = read_pam_message_with_timeout(&mut server, Duration::from_millis(25)).await;
+    assert!(
+        matches!(result, Err(Error::IO(err)) if err.kind() == std::io::ErrorKind::TimedOut),
+        "Incomplete frame payload must fail with a timeout"
+    );
+    Ok(())
+}

@@ -22,27 +22,49 @@ use crate::{Service, error::Error};
 // Check the client-controlled length before allocating or reading its body.
 const MAX_PAM_MESSAGE_BYTES: usize = 64 * 1024;
 
+// Bound the entire read, including the length prefix and payload, so an
+// incomplete same-user connection cannot hold a daemon task forever.
+const PAM_FRAME_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 async fn read_pam_message(stream: &mut UnixStream) -> Result<PamMessage, Error> {
-    let mut length_bytes = [0u8; 4];
-    stream.read_exact(&mut length_bytes).await?;
-    let message_length = u32::from_le_bytes(length_bytes) as usize;
+    read_pam_message_with_timeout(stream, PAM_FRAME_READ_TIMEOUT).await
+}
 
-    if message_length == 0 || message_length > MAX_PAM_MESSAGE_BYTES {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "Invalid PAM message length {message_length} (maximum {MAX_PAM_MESSAGE_BYTES})"
-            ),
+async fn read_pam_message_with_timeout(
+    stream: &mut UnixStream,
+    read_timeout: std::time::Duration,
+) -> Result<PamMessage, Error> {
+    tokio::time::timeout(read_timeout, async {
+        let mut length_bytes = [0u8; 4];
+        stream.read_exact(&mut length_bytes).await?;
+        let message_length = u32::from_le_bytes(length_bytes) as usize;
+
+        if message_length == 0 || message_length > MAX_PAM_MESSAGE_BYTES {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Invalid PAM message length {message_length} (maximum {MAX_PAM_MESSAGE_BYTES})"
+                ),
+            )
+            .into());
+        }
+
+        // The serialized frame contains plaintext credentials; wipe it on drop,
+        // including when the read times out with a partially populated buffer.
+        let mut message_bytes = zeroize::Zeroizing::new(vec![0u8; message_length]);
+        stream.read_exact(message_bytes.as_mut_slice()).await?;
+
+        PamMessage::from_bytes(&message_bytes).map_err(|err| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string()).into()
+        })
+    })
+    .await
+    .map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "Timed out reading PAM credential frame",
         )
-        .into());
-    }
-
-    // The serialized frame contains plaintext credentials; wipe it on drop.
-    let mut message_bytes = zeroize::Zeroizing::new(vec![0u8; message_length]);
-    stream.read_exact(message_bytes.as_mut_slice()).await?;
-
-    PamMessage::from_bytes(&message_bytes)
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string()).into())
+    })?
 }
 
 #[derive(Debug, Clone, Copy, Serialize_repr, Deserialize_repr, Type, PartialEq, Eq)]
