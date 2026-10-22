@@ -608,8 +608,27 @@ impl Service {
         let pam_listener = crate::pam_listener::PamListener::new(service.clone());
         let pam_listener_replay = pam_listener.clone();
         tokio::spawn(async move {
-            if let Err(e) = pam_listener.start().await {
-                tracing::error!("PAM listener error: {}", e);
+            let mut attempts = 0;
+            loop {
+                match pam_listener.clone().start().await {
+                    // Explicit replacement can win D-Bus ownership while the
+                    // displaced daemon is still closing its PAM listener.
+                    // Retry only that deliberate handoff; never steal a live
+                    // Unix socket or silently hide an unrelated error.
+                    Err(Error::IO(ref err))
+                        if request_replacement
+                            && err.kind() == std::io::ErrorKind::AddrInUse
+                            && attempts < 40 =>
+                    {
+                        attempts += 1;
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                    Err(e) => {
+                        tracing::error!("PAM listener error: {}", e);
+                        break;
+                    }
+                    Ok(()) => break,
+                }
             }
         });
 
