@@ -3,8 +3,8 @@
 # and preserve a disposable persistent keyring. Never uses live credentials.
 set -euo pipefail
 
-daemon="${1:-target/debug/oo7-daemon}"
-cli="${2:-target/debug/oo7-cli}"
+daemon="${1:-target/debug/oo8-daemon}"
+cli="${2:-target/debug/oo8-cli}"
 [[ "$daemon" == /* ]] || daemon="$PWD/$daemon"
 [[ "$cli" == /* ]] || cli="$PWD/$cli"
 [[ -x "$daemon" && -x "$cli" ]] || { echo "FAIL: missing executables" >&2; exit 1; }

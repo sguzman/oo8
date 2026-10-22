@@ -3,8 +3,8 @@
 # All data and credentials are generated here; no host keyrings are accessed.
 set -euo pipefail
 
-daemon="${1:-target/debug/oo7-daemon}"
-cli="${2:-target/debug/oo7-cli}"
+daemon="${1:-target/debug/oo8-daemon}"
+cli="${2:-target/debug/oo8-cli}"
 [[ "$daemon" == /* ]] || daemon="$PWD/$daemon"
 [[ "$cli" == /* ]] || cli="$PWD/$cli"
 

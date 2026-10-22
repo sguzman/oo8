@@ -3,8 +3,8 @@
 # Uses an isolated D-Bus session, disposable credentials, and temporary data.
 set -euo pipefail
 
-daemon="${1:-target/debug/oo7-daemon}"
-cli="${2:-target/debug/oo7-cli}"
+daemon="${1:-target/debug/oo8-daemon}"
+cli="${2:-target/debug/oo8-cli}"
 [[ "$daemon" == /* ]] || daemon="$PWD/$daemon"
 [[ "$cli" == /* ]] || cli="$PWD/$cli"
 [[ -x "$daemon" && -x "$cli" ]] || { echo "FAIL: executables not found" >&2; exit 1; }
