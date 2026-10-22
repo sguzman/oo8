@@ -536,3 +536,52 @@ async fn locked_item_operations() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn failed_item_decryption_preserves_locked_item()
+-> Result<(), Box<dyn std::error::Error>> {
+    let setup = TestServiceSetup::plain_session(true).await?;
+    let item = setup
+        .create_item("Preserved Item", &[("app", "failure-recovery")], "test-secret", false)
+        .await?;
+
+    let collection = {
+        let collections = setup.server.collections.lock().await;
+        let mut found = None;
+        for collection in collections.values() {
+            if collection.alias().await == oo7::dbus::Service::DEFAULT_COLLECTION {
+                found = Some(collection.clone());
+            }
+        }
+        found.expect("Default collection is missing")
+    };
+    let server_item = collection
+        .item_from_path(item.inner().path())
+        .await
+        .expect("Server-side item is missing");
+
+    // The first conversion encrypts the item with the real collection key.
+    let keyring = collection.keyring.read().await;
+    let Some(oo7::file::Keyring::Unlocked(correct_keyring)) = keyring.as_ref() else {
+        panic!("Test collection must be unlocked");
+    };
+    server_item.set_locked(true, correct_keyring).await?;
+    assert!(server_item.is_locked().await);
+
+    // An unrelated keyring cannot decrypt it. A failed conversion must not
+    // empty the item slot or permanently discard the encrypted value.
+    let unrelated = oo7::file::UnlockedKeyring::temporary(
+        oo7::Secret::from("unrelated-disposable-password"),
+    )
+    .await?;
+    assert!(server_item.set_locked(false, &unrelated).await.is_err());
+    assert!(
+        server_item.inner.lock().await.is_some(),
+        "Failed conversion erased the encrypted item"
+    );
+    assert!(server_item.is_locked().await);
+
+    server_item.set_locked(false, correct_keyring).await?;
+    assert!(!server_item.is_locked().await);
+    Ok(())
+}
