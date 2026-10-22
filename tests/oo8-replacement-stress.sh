@@ -41,10 +41,16 @@ trap cleanup EXIT
 
 fail() {
     echo "FAIL: $*" >&2
+    for report in "$sandbox"/reader-*.failure; do
+        if [[ -s "$report" ]]; then
+            echo "--- $(basename "$report") ---" >&2
+            cat "$report" >&2
+        fi
+    done
     for log in "$sandbox"/*.log; do
         if [[ -f "$log" ]]; then
             echo "--- $(basename "$log") ---" >&2
-            tail -n 65 "$log" >&2
+            tail -n 20 "$log" >&2
         fi
     done
     exit 1
@@ -133,9 +139,14 @@ printf '%s\n' "$secret" | "$cli" store "oo8 concurrent stress" "$attribute" \
 reader() {
     local number="$1" ok=0 transient=0 result
     while [[ ! -e "$sandbox/stop-readers" ]]; do
+        local owner_before owner_after
+        owner_before="$(owner)"
         if result="$(get_secret 2>/dev/null)"; then
             if [[ "$result" != "$secret" ]]; then
-                echo "wrong secret returned: $result" > "$sandbox/reader-$number.failure"
+                owner_after="$(owner)"
+                printf 'unexpected successful lookup: result=%q owner_before=%q owner_after=%q\n' \
+                    "$result" "$owner_before" "$owner_after" \
+                    > "$sandbox/reader-$number.failure"
                 return 1
             fi
             ok=$((ok+1))
