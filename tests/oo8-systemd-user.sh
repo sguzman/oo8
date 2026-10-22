@@ -4,7 +4,13 @@
 set -euo pipefail
 daemon="${1:?absolute daemon executable path required}"
 cli="${2:?absolute CLI executable path required}"
+template="$(cd -- "$(dirname -- "$0")/.." && pwd)/packaging/soar/oo7-daemon.service"
 [[ "$daemon" == /* && "$cli" == /* ]] || { echo "Use absolute binary paths" >&2; exit 2; }
+[[ -f "$template" ]] || { echo "Packaged service unit missing" >&2; exit 2; }
+[[ "${GITHUB_ACTIONS:-}" == true && -n "${GITHUB_RUN_ID:-}" ]] || {
+    echo "FAIL: real systemd account test is GitHub CI only" >&2
+    exit 2
+}
 
 # Unlike the private D-Bus test, this deliberately needs a real host systemd
 # PID1 to create an actual user manager and credential delivery directory.
@@ -21,7 +27,7 @@ cleanup() {
     if [[ -n "$uid" ]]; then
         runuser -u "$user" -- env XDG_RUNTIME_DIR="/run/user/$uid" \
             DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-            systemctl --user stop oo8-regression.service >/dev/null 2>&1 || true
+            systemctl --user stop oo8-regression.service oo8-packaged.service >/dev/null 2>&1 || true
     fi
     loginctl disable-linger "$user" >/dev/null 2>&1 || true
     if [[ -n "$uid" ]]; then
@@ -144,4 +150,46 @@ wait_ready
 [[ "$(state)" == *"boolean false"* ]] || fail "correct secret did not unlock keyring"
 [[ "$(as_user "$cli" lookup --secret-only "$attr")" == "$secret" ]] \
     || fail "persisted secret was lost after restarting through systemd"
-echo "PASS: real systemd --user, LoadCredential, Type=dbus, restart, locked recovery, persisted item"
+# The transient systemd-run check is not sufficient for desktop rollout.
+# Also exercise the unmodified production hardening and ExecStart from the
+# distributed user service template, in this disposable CI account only.
+as_user systemctl --user stop oo8-regression.service || fail "could not stop transient service"
+home="/home/$user"
+unit_dir="$home/.config/systemd/user"
+install -d -m 0755 -o "$user" -g "$user" "$unit_dir" "$home/.local/share/soar/bin"
+install -m 0755 -o "$user" -g "$user" "$daemon" "$home/.local/share/soar/bin/oo7-daemon"
+unit="$unit_dir/oo8-packaged.service"
+install -m 0644 -o "$user" -g "$user" "$template" "$unit"
+# Only the source of the disposable credential and data directory differ
+# from the published template; all service sandbox options are preserved.
+cat >> "$unit" <<EOF
+
+[Service]
+LoadCredential=oo7.keyring-encryption-password:$credential
+Environment=XDG_DATA_HOME=$data/data
+Environment=OO7_PAM_SOCKET=$data/packaged-pam.sock
+Environment=XDG_RUNTIME_DIR=/run/user/$uid
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus
+EOF
+as_user systemctl --user daemon-reload || fail "could not load shipped service template"
+as_user systemctl --user start oo8-packaged.service || fail "shipped service template did not start"
+wait_ready
+[[ "$(state)" == *"boolean false"* ]] || fail "shipped service did not import keyring credential"
+[[ "$(as_user "$cli" lookup --secret-only "$attr")" == "$secret" ]] \
+    || fail "shipped service failed to read the existing encrypted item"
+
+printf '%s' 'oo8-ci-wrong-password' > "$credential"
+as_user systemctl --user restart oo8-packaged.service || fail "shipped unit restart with wrong password failed"
+wait_ready
+[[ "$(state)" == *"boolean true"* ]] || fail "shipped unit did not lock on wrong credential"
+[[ "$(sha256sum "$keyring" | cut -d' ' -f1)" == "$before" ]] \
+    || fail "shipped unit modified encrypted keyring on wrong credential"
+
+printf '%s' 'oo8-ci-systemd-password' > "$credential"
+as_user systemctl --user restart oo8-packaged.service || fail "shipped unit recovery restart failed"
+wait_ready
+[[ "$(state)" == *"boolean false"* ]] || fail "shipped unit failed to unlock on correct credential"
+[[ "$(as_user "$cli" lookup --secret-only "$attr")" == "$secret" ]] \
+    || fail "shipped unit failed to recover the persisted secret"
+
+echo "PASS: isolated systemd manager, shipped unit, credential import, sandbox, persistent data and recovery"
