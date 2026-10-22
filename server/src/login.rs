@@ -74,7 +74,10 @@ fn read_login_secret(mut source: impl Read) -> io::Result<zeroize::Zeroizing<Vec
         .take((MAX_LOGIN_SECRET_BYTES + 1) as u64)
         .read_to_end(&mut secret)?;
     if secret.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Empty login secret"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Empty login secret",
+        ));
     }
     if secret.len() > MAX_LOGIN_SECRET_BYTES {
         return Err(io::Error::new(

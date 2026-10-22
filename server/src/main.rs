@@ -136,7 +136,7 @@ async fn read_secret_from_credentials_directory() -> Option<oo7::Secret> {
     let cred_path = std::path::Path::new(&credential_dir).join("oo7.keyring-encryption-password");
 
     match tokio::fs::File::open(&cred_path).await {
-        Ok(mut cred_file) => {
+        Ok(cred_file) => {
             use tokio::io::AsyncReadExt;
 
             let mut contents = zeroize::Zeroizing::new(Vec::new());
@@ -280,12 +280,9 @@ mod login_secret_tests {
             std::io::ErrorKind::InvalidInput
         );
         assert_eq!(
-            read_bounded_login_secret(std::io::Cursor::new(vec![
-                5u8;
-                MAX_LOGIN_SECRET_BYTES + 20
-            ]))
-            .unwrap_err()
-            .kind(),
+            read_bounded_login_secret(std::io::Cursor::new(vec![5u8; MAX_LOGIN_SECRET_BYTES + 20]))
+                .unwrap_err()
+                .kind(),
             std::io::ErrorKind::InvalidData
         );
     }
