@@ -363,7 +363,7 @@ async fn pam_rejects_invalid_frame_lengths_before_allocation()
         let result = timeout(Duration::from_secs(1), read_pam_message(&mut server)).await?;
         assert!(
             matches!(&result, Err(Error::IO(err)) if err.kind() == std::io::ErrorKind::InvalidData),
-            "Unexpected result for frame length {length}: {result:?}"
+            "Invalid PAM frame length {length} was not rejected"
         );
     }
 
