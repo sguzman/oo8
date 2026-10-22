@@ -540,12 +540,15 @@ async fn locked_item_operations() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 async fn failed_item_decryption_preserves_locked_item() -> Result<(), Box<dyn std::error::Error>> {
     let setup = TestServiceSetup::plain_session(true).await?;
-    let item = setup
+    let default_collection = setup.default_collection().await?;
+    let secret = setup.create_dbus_secret("test-secret")?;
+    let item = default_collection
         .create_item(
             "Preserved Item",
             &[("app", "failure-recovery")],
-            "test-secret",
+            &secret,
             false,
+            None,
         )
         .await?;
 
@@ -593,13 +596,10 @@ async fn failed_item_decryption_preserves_locked_item() -> Result<(), Box<dyn st
 async fn item_decryption_failure_preserves_unlocked_collection()
 -> Result<(), Box<dyn std::error::Error>> {
     let setup = TestServiceSetup::plain_session(true).await?;
-    let item = setup
-        .create_item(
-            "Mixed Key Item",
-            &[("app", "mixed-keys")],
-            "disposable-secret",
-            false,
-        )
+    let default_collection = setup.default_collection().await?;
+    let secret = setup.create_dbus_secret("disposable-secret")?;
+    let item = default_collection
+        .create_item("Mixed Key Item", &[("app", "mixed-keys")], &secret, false, None)
         .await?;
 
     let collection = {
