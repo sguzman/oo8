@@ -45,4 +45,4 @@ jobs:
         run: |
           sudo env GITHUB_ACTIONS="$GITHUB_ACTIONS" GITHUB_RUN_ID="$GITHUB_RUN_ID" \
             timeout 120s bash tests/oo8-systemd-user.sh \
-            "$PWD/target/debug/oo7-daemon" "$PWD/target/debug/oo7-cli"
+            "$PWD/target/debug/oo8-daemon" "$PWD/target/debug/oo8-cli"

@@ -42,10 +42,10 @@ data="/home/$user/oo8-test"
 install -d -m 0700 -o "$user" -g "$user" "$data" "$data/data" "$data/credentials" "$data/bin"
 # GitHub runner's workspace is not traversable by another account. Copy the
 # exact just-built executables into the throwaway account, preserving versions.
-install -m 0755 -o "$user" -g "$user" "$daemon" "$data/bin/oo7-daemon"
-install -m 0755 -o "$user" -g "$user" "$cli" "$data/bin/oo7-cli"
-daemon="$data/bin/oo7-daemon"
-cli="$data/bin/oo7-cli"
+install -m 0755 -o "$user" -g "$user" "$daemon" "$data/bin/oo8-daemon"
+install -m 0755 -o "$user" -g "$user" "$cli" "$data/bin/oo8-cli"
+daemon="$data/bin/oo8-daemon"
+cli="$data/bin/oo8-cli"
 credential="$data/credentials/oo7.keyring-encryption-password"
 secret="oo8-ci-systemd-disposable-secret"
 attr="oo8-systemd-test=${GITHUB_RUN_ID:-local}"
@@ -157,7 +157,7 @@ as_user systemctl --user stop oo8-regression.service || fail "could not stop tra
 home="/home/$user"
 unit_dir="$home/.config/systemd/user"
 install -d -m 0755 -o "$user" -g "$user" "$unit_dir" "$home/.local/share/soar/bin"
-install -m 0755 -o "$user" -g "$user" "$daemon" "$home/.local/share/soar/bin/oo7-daemon"
+install -m 0755 -o "$user" -g "$user" "$daemon" "$home/.local/share/soar/bin/oo8-daemon"
 unit="$unit_dir/oo8-packaged.service"
 install -m 0644 -o "$user" -g "$user" "$template" "$unit"
 # Only the source of the disposable credential and data directory differ

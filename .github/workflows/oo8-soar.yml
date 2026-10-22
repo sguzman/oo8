@@ -42,35 +42,35 @@ jobs:
           runuser -u oo8ci -- env \
             OO8_STARTUP_ITERATIONS="$OO8_STARTUP_ITERATIONS" \
             bash "$GITHUB_WORKSPACE/tests/oo8-startup-race.sh" \
-            unused "$GITHUB_WORKSPACE/target/release/oo7-daemon"
+            unused "$GITHUB_WORKSPACE/target/release/oo8-daemon"
       - name: Exercise persistent keyring lifecycle with packaged executables
         run: |
           runuser -u oo8ci -- bash "$GITHUB_WORKSPACE/tests/oo8-keyring-lifecycle.sh" \
-            "$GITHUB_WORKSPACE/target/release/oo7-daemon" \
-            "$GITHUB_WORKSPACE/target/release/oo7-cli"
+            "$GITHUB_WORKSPACE/target/release/oo8-daemon" \
+            "$GITHUB_WORKSPACE/target/release/oo8-cli"
       - name: Verify no implicit D-Bus takeover using packaged executables
         run: |
           runuser -u oo8ci -- bash "$GITHUB_WORKSPACE/tests/oo8-dbus-ownership.sh" \
-            "$GITHUB_WORKSPACE/target/release/oo7-daemon" \
-            "$GITHUB_WORKSPACE/target/release/oo7-cli"
+            "$GITHUB_WORKSPACE/target/release/oo8-daemon" \
+            "$GITHUB_WORKSPACE/target/release/oo8-cli"
       - name: Verify explicit daemon replacement and PAM socket handoff
         run: |
           runuser -u oo8ci -- bash "$GITHUB_WORKSPACE/tests/oo8-explicit-replace.sh" \
-            "$GITHUB_WORKSPACE/target/release/oo7-daemon" \
-            "$GITHUB_WORKSPACE/target/release/oo7-cli"
+            "$GITHUB_WORKSPACE/target/release/oo8-daemon" \
+            "$GITHUB_WORKSPACE/target/release/oo8-cli"
       - name: Stress repeated replacement with packaged executables
         env:
           OO8_REPLACE_ITERATIONS: '6'
         run: |
           runuser -u oo8ci -- env OO8_REPLACE_ITERATIONS="$OO8_REPLACE_ITERATIONS" \
             bash "$GITHUB_WORKSPACE/tests/oo8-replacement-stress.sh" \
-            "$GITHUB_WORKSPACE/target/release/oo7-daemon" \
-            "$GITHUB_WORKSPACE/target/release/oo7-cli"
+            "$GITHUB_WORKSPACE/target/release/oo8-daemon" \
+            "$GITHUB_WORKSPACE/target/release/oo8-cli"
       - name: Assemble Soar release archive
         run: |
           set -euo pipefail
           mkdir -p dist/archive/bin
-          for name in oo7-daemon oo7-daemon-login oo7-portal oo7-cli git-credential-oo7 cargo-credential-oo7; do
+          for name in oo8-daemon oo8-daemon-login oo8-portal oo8-cli git-credential-oo8 cargo-credential-oo8; do
             test -x "target/release/$name"
             install -m755 "target/release/$name" "dist/archive/bin/$name"
           done
@@ -78,8 +78,8 @@ jobs:
           cd dist/archive
           tar -czf ../oo8-x86_64-linux.tar.gz bin LICENSE
           cd ..
-          tar -tzf oo8-x86_64-linux.tar.gz | grep -Fx 'bin/oo7-daemon'
-          tar -tzf oo8-x86_64-linux.tar.gz | grep -Fx 'bin/oo7-portal'
+          tar -tzf oo8-x86_64-linux.tar.gz | grep -Fx 'bin/oo8-daemon'
+          tar -tzf oo8-x86_64-linux.tar.gz | grep -Fx 'bin/oo8-portal'
           sha256sum oo8-x86_64-linux.tar.gz > oo8-x86_64-linux.tar.gz.sha256
       - name: Exercise assembled archive in disposable sessions
         run: |

@@ -29,22 +29,22 @@ trap 'rm -rf -- "$scratch"' EXIT
 mkdir -m 700 -p "$scratch/home" "$scratch/home/.config" "$scratch/home/.cache" "$scratch/unpacked"
 
 expected="$(printf '%s\n' \
-    'LICENSE' 'bin/' 'bin/oo7-daemon' 'bin/oo7-daemon-login' \
-    'bin/oo7-portal' 'bin/oo7-cli' 'bin/git-credential-oo7' \
-    'bin/cargo-credential-oo7' | LC_ALL=C sort)"
+    'LICENSE' 'bin/' 'bin/oo8-daemon' 'bin/oo8-daemon-login' \
+    'bin/oo8-portal' 'bin/oo8-cli' 'bin/git-credential-oo8' \
+    'bin/cargo-credential-oo8' | LC_ALL=C sort)"
 actual="$(tar -tzf "$archive" | LC_ALL=C sort)"
 [[ "$actual" == "$expected" ]] || fail "archive contains unexpected or missing paths"
 
 tar -xzf "$archive" -C "$scratch/unpacked" --no-same-owner --no-same-permissions
 [[ -d "$scratch/unpacked/bin" && ! -L "$scratch/unpacked/bin" ]] || fail "invalid bin directory"
 [[ -f "$scratch/unpacked/LICENSE" && ! -L "$scratch/unpacked/LICENSE" ]] || fail "license missing"
-for name in oo7-daemon oo7-daemon-login oo7-portal oo7-cli git-credential-oo7 cargo-credential-oo7; do
+for name in oo8-daemon oo8-daemon-login oo8-portal oo8-cli git-credential-oo8 cargo-credential-oo8; do
     file="$scratch/unpacked/bin/$name"
     [[ -f "$file" && ! -L "$file" && -x "$file" ]] || fail "invalid executable: $name"
 done
 
-daemon="$scratch/unpacked/bin/oo7-daemon"
-cli="$scratch/unpacked/bin/oo7-cli"
+daemon="$scratch/unpacked/bin/oo8-daemon"
+cli="$scratch/unpacked/bin/oo8-cli"
 export HOME="$scratch/home"
 export XDG_CONFIG_HOME="$scratch/home/.config"
 export XDG_CACHE_HOME="$scratch/home/.cache"

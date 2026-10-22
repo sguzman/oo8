@@ -4,7 +4,7 @@
 # credential directory, isolated on a private D-Bus session.
 set -euo pipefail
 
-daemon="${2:-target/debug/oo7-daemon}"
+daemon="${2:-target/debug/oo8-daemon}"
 if [[ "$daemon" != /* ]]; then
     daemon="$PWD/$daemon"
 fi
