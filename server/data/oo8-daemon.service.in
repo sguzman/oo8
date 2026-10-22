@@ -1,5 +1,5 @@
 [Unit]
-Description=Secret Service (oo8 implementation, oo7-compatible service)
+Description=Secret Service (oo8 implementation)
 
 [Service]
 Type=dbus
@@ -34,3 +34,4 @@ ProtectClock=yes
 
 [Install]
 WantedBy=default.target
+Alias=dbus-org.freedesktop.secrets.service

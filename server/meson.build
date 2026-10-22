@@ -9,7 +9,7 @@ i18n = import('i18n')
 
 is_devel = get_option('profile') == 'development'
 dbus_known_name = 'org.freedesktop.secrets'
-service_name = meson.project_name()
+service_name = 'oo8-daemon'
 gettext_package = meson.project_name()
 
 prefix = get_option('prefix')

@@ -1,6 +1,6 @@
 # One-time per-user service, to be installed as
-# ~/.config/systemd/user/oo7-daemon.service
-# This shadows Arch's vendor unit without modifying /usr/lib.
+# ~/.config/systemd/user/oo8-daemon.service
+# Separate from upstream oo7; never run both against org.freedesktop.secrets.
 # No PAM change and no changes to your keyring files.
 [Unit]
 Description=Secret Service (oo8, Cargo-managed)
@@ -25,3 +25,5 @@ MemoryDenyWriteExecute=true
 
 [Install]
 WantedBy=default.target
+# Override the vendor's D-Bus activation alias when this unit is enabled.
+Alias=dbus-org.freedesktop.secrets.service
