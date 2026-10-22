@@ -308,12 +308,15 @@ impl PamListener {
                 );
 
                 let secret = Secret::from(message.new_secret.to_vec());
-                if let Some(buffered) = self.user_secrets.write().await.as_mut() {
-                    buffered.insert(message.username.clone(), secret.clone());
-                }
 
                 match self.try_unlock_collections(&secret).await {
                     Ok(_) => {
+                        // A rejected password is never eligible for startup
+                        // replay. Only retain credentials that successfully
+                        // passed the daemon's unlock checks.
+                        if let Some(buffered) = self.user_secrets.write().await.as_mut() {
+                            buffered.insert(message.username.clone(), secret.clone());
+                        }
                         tracing::info!(
                             "Successfully unlocked collections for user: {}",
                             message.username
