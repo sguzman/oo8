@@ -1,6 +1,9 @@
 use std::{
-    io,
-    os::unix::fs::{FileTypeExt, MetadataExt},
+    io::{self, Write},
+    os::{
+        fd::{FromRawFd, RawFd},
+        unix::fs::{FileTypeExt, MetadataExt},
+    },
     path::PathBuf,
     time::Duration,
 };
@@ -216,6 +219,14 @@ pub fn send_secret_to_daemon(
     }
 }
 
+// Take ownership of the descriptor so it is always closed, including after
+// an interrupted write or a receiver that closes early. write_all retries
+// short writes and EINTR and reports EPIPE rather than silently truncating.
+fn send_secret_to_helper_pipe(write_fd: RawFd, secret: &[u8]) -> io::Result<()> {
+    let mut writer = unsafe { std::fs::File::from_raw_fd(write_fd) };
+    writer.write_all(secret)
+}
+
 /// Start the oo7-daemon-login helper, passing the secret via stdin pipe.
 ///
 /// The helper holds the secret on a socket until oo7-daemon connects and
@@ -261,23 +272,10 @@ fn start_login_helper(secret: &[u8]) -> Result<(), SocketError> {
         child_pid => {
             unsafe {
                 libc::close(pipe_read);
-
-                let mut written = 0;
-                while written < secret.len() {
-                    let n = libc::write(
-                        pipe_write,
-                        secret.as_ptr().add(written) as *const libc::c_void,
-                        secret.len() - written,
-                    );
-                    if n <= 0 {
-                        break;
-                    }
-                    written += n as usize;
-                }
-                libc::close(pipe_write);
             }
-
+            let sent = send_secret_to_helper_pipe(pipe_write, secret);
             drop(saved_signals);
+            sent.map_err(SocketError::Send)?;
             tracing::info!("Started oo7-daemon-login with PID {child_pid}");
             Ok(())
         }
@@ -407,6 +405,24 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn helper_pipe_receives_complete_secret() -> Result<(), Box<dyn std::error::Error>> {
+        use io::Read;
+
+        let mut descriptors = [0; 2];
+        if unsafe { libc::pipe(descriptors.as_mut_ptr()) } != 0 {
+            return Err(io::Error::last_os_error().into());
+        }
+        let secret = b"disposable-helper-credential";
+        send_secret_to_helper_pipe(descriptors[1], secret)?;
+
+        let mut reader = unsafe { std::fs::File::from_raw_fd(descriptors[0]) };
+        let mut transferred = Vec::new();
+        reader.read_to_end(&mut transferred)?;
+        assert_eq!(transferred, secret);
+        Ok(())
+    }
 
     #[test]
     fn pam_frames_must_have_bounded_lengths() {
