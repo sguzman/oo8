@@ -566,6 +566,28 @@ impl Collection {
     ) -> Result<(), ServiceError> {
         let mut keyring_guard = self.keyring.write().await;
 
+        // Validate while the locked keyring is still owned by the collection.
+        // The consuming unlock API cannot restore it from disk if its backing
+        // file was removed or is temporarily inaccessible. In particular, a
+        // wrong password must never replace the in-memory keyring with None.
+        if !locked && let Some(Keyring::Locked(keyring)) = keyring_guard.as_ref() {
+            let valid = match secret.as_ref() {
+                Some(secret) => keyring.validate_secret(secret).await,
+                None => keyring.validate_unencrypted().await,
+            };
+            match valid {
+                Ok(true) => {}
+                Ok(false) => {
+                    return Err(custom_service_error("Failed to unlock keyring: incorrect secret"));
+                }
+                Err(err) => {
+                    return Err(custom_service_error(&format!(
+                        "Failed to validate keyring secret: {err}"
+                    )));
+                }
+            }
+        }
+
         if let Some(old_keyring) = keyring_guard.take() {
             let new_keyring = match (old_keyring, locked) {
                 (Keyring::Unlocked(unlocked), true) => {

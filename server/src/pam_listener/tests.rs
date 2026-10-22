@@ -738,3 +738,63 @@ async fn pam_password_change_with_no_persistent_keyrings_is_not_success()
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn wrong_unlock_preserves_keyring_without_backing_file()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    let correct = Secret::from("correct-offline-password");
+    let keyring = UnlockedKeyring::open_at(temp.path(), "work", Some(correct.clone())).await?;
+    keyring
+        .create_item(
+            "Offline Item",
+            &[("kind", "offline")],
+            Secret::text("disposable-secret"),
+            false,
+        )
+        .await?;
+    keyring.write().await?;
+
+    let keyring_file = temp.path().join("keyrings/v1/work.keyring");
+    assert!(keyring_file.exists(), "Test requires a disk-backed keyring");
+
+    let setup = crate::tests::TestServiceSetup::with_disk_keyrings(
+        temp.path().to_path_buf(),
+        Some(temp.path().join("offline-pam.sock")),
+        None,
+    )
+    .await?;
+    let work = {
+        let collections = setup.server.collections.lock().await;
+        let mut work = None;
+        for collection in collections.values() {
+            if collection.label().await == "Work" {
+                work = Some(collection.clone());
+            }
+        }
+        work.expect("Work collection missing")
+    };
+    assert!(work.is_locked().await, "Test starts with a locked collection");
+
+    // Simulate a missing/unreadable backing file. The incorrect password
+    // must not consume the live in-memory keyring and leave an empty slot.
+    tokio::fs::remove_file(&keyring_file).await?;
+    let result = work
+        .set_locked(false, Some(Secret::from("incorrect-password")))
+        .await;
+    assert!(result.is_err(), "Invalid credential must fail");
+    assert!(
+        work.keyring.read().await.is_some(),
+        "Failed unlock discarded the in-memory keyring"
+    );
+    assert!(
+        work.is_locked().await,
+        "Failed unlock changed the collection lock state"
+    );
+
+    // The same in-memory encrypted keyring must still accept its original
+    // credential even though the disposable backing file was removed.
+    work.set_locked(false, Some(correct)).await?;
+    assert!(!work.is_locked().await, "Valid retry did not unlock the keyring");
+    Ok(())
+}
