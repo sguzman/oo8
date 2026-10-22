@@ -222,7 +222,8 @@ impl PamListener {
                     let pam_listener = self.clone();
 
                     tokio::spawn(async move {
-                        // Dropping this guard releases the slot on any exit path.
+                        // Dropping this guard releases the slot on any exit
+                        // path.
                         let _permit = permit;
                         if let Err(e) = pam_listener.handle_connection(stream).await {
                             tracing::error!("Error handling PAM connection: {}", e);
