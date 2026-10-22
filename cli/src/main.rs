@@ -896,12 +896,18 @@ struct Arguments {
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
+    // The CLI is used by shell scripts and credential helpers: stdout is
+    // reserved for command results (especially lookup --secret-only).
+    // D-Bus name-change diagnostics must never contaminate secret output.
     if cli.args.is_verbose {
         tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
             .with_max_level(tracing_subscriber::filter::LevelFilter::DEBUG)
             .init();
     } else {
-        tracing_subscriber::fmt::init();
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .init();
     }
 
     cli.command.execute(cli.args).await
