@@ -6,17 +6,17 @@ oo8 is an independently maintained fork of [oo7](https://github.com/linux-creden
 
 ## Installation and updates
 
-**Two supported channels:** Cargo installs the latest development code from `main`; GitHub Releases + Soar installs versioned builds. Neither requires a separate GitHub repo, AUR submission, or pacman registration. The service unit is configured only once for whichever channel you choose.
+**Two supported channels:** Cargo installs the latest development code from `main`; GitHub Releases + Soar installs versioned builds. Neither requires a separate GitHub repo, AUR submission, or pacman registration. The service unit is configured only once for whichever channel you choose. Installed oo8 executables have distinct names and do not overwrite the distro oo7 executable.
 
 ### Development: Cargo from main
 
-Use [Cargo development installation](packaging/cargo/README.md) to build directly from `main` without tags or releases:
+Use [Cargo development installation](packaging/cargo/README.md) from your local oo8 repository checkout (run in the repo root):
 
 ```fish
-cargo install --git https://github.com/sguzman/oo8.git --branch main --package oo7-daemon --locked --force
+cargo install --path ./server --locked --force
 ```
 
-Re-running the same command fetches current `main` and replaces installed binaries. Cargo does not automatically follow new commits; run it again to update. The Cargo systemd user-service template uses `%h/.cargo/bin/oo7-daemon`, and no further edits are required after the initial configuration. Do not mix Cargo and Soar binaries in the same live service.
+Re-running the same command rebuilds your local checkout and replaces the installed oo8 binaries. Cargo does not automatically follow new commits; run it again to update. The Cargo systemd user-service template uses `%h/.cargo/bin/oo8-daemon`, and no further edits are required after the initial configuration. Do not mix Cargo and Soar binaries in the same live service.
 
 ### Stable releases: Soar
 
@@ -42,7 +42,7 @@ Full procedure: [Soar and systemd setup](packaging/soar/README.md).
 - [Maintenance and rollout policy](OO8.md)
 - [Download releases](https://github.com/sguzman/oo8/releases)
 
-**Release distribution:** GitHub Releases -> Soar -> fixed user-service executable link. **Development distribution:** current main -> Cargo -> fixed Cargo executable link. Soar tracks and updates released binaries through `soar update`; no pacman registration, manually maintained PKGBUILD, separate GitHub repo, or repeated systemd edits. A running daemon uses the new executable after the next service restart/login.
+**Release distribution:** GitHub Releases -> Soar -> fixed user-service executable link. **Development distribution:** local source -> Cargo -> fixed Cargo executable link. Soar tracks and updates released binaries through `soar update`; no pacman registration, manually maintained PKGBUILD, separate GitHub repo, or repeated systemd edits. A running daemon uses the new executable after the next service restart/login.
 
 Soar does not manage PAM modules or desktop portal registration. The first rollout focuses on the user daemon and existing systemd encrypted-credential unlock. Other integration is explicitly a separate tested milestone.
 

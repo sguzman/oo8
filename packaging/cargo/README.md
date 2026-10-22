@@ -5,24 +5,26 @@ GitHub Releases, a Soar manifest, a PKGBUILD, or a pacman repository.
 The release channel remains GitHub Releases + Soar. Choose **one** daemon
 source for your active systemd user service; never start both simultaneously.
 
-## Install current main
+## Install from the local oo8 source checkout
+
+Run from the oo8 repository root after updating the checkout.
 
 ```fish
-cargo install --git https://github.com/sguzman/oo8.git --branch main --package oo7-daemon --locked
+cargo install --path ./server --locked
 ```
 
-The `oo7-daemon` Cargo package builds two binaries, `oo7-daemon` and
-`oo7-daemon-login`, into the default Cargo binary directory,
+The inherited `oo7-daemon` Cargo package builds two distinct oo8 binaries,
+`oo8-daemon` and `oo8-daemon-login`, into the default Cargo binary directory,
 `~/.cargo/bin`. If you use a customized `CARGO_HOME` or
 `CARGO_INSTALL_ROOT`, the directory may differ.
 
-## Update to latest main, without publishing a release
+## Reinstall current local changes, without publishing a release
 
 ```fish
-cargo install --git https://github.com/sguzman/oo8.git --branch main --package oo7-daemon --locked --force
+cargo install --path ./server --locked --force
 ```
 
-Re-run that command whenever you want the latest development commit. Cargo
+Re-run that command to install updated code from your local checkout. Cargo
 does **not** automatically watch the branch or rebuild an already installed
 binary when new commits land. `--force` makes a reinstall reliable even
 when the crate's semantic version has not changed. You can automate this
@@ -36,7 +38,7 @@ It still needs the one-time systemd service configuration below.
 ## One-time systemd integration (development channel only)
 
 The [Cargo user-service template](oo7-daemon.service) points to
-`%h/.cargo/bin/oo7-daemon`. It retains the `org.freedesktop.secrets`
+`%h/.cargo/bin/oo8-daemon`. It retains the `org.freedesktop.secrets`
 D-Bus name and the `oo7.keyring-encryption-password` systemd credential.
 
 Before replacing the live system service:
@@ -63,3 +65,5 @@ reload the user manager; do not delete existing encrypted keyring data.
 
 See [the release-oriented Soar path](../soar/README.md) for installing
 versioned releases instead of current `main`.
+
+The `oo8-*` names are distinct from distribution-provided upstream executables. The inherited Cargo package name and the `oo7-daemon.service` override filename stay unchanged for now: that user unit intentionally shadows the distro unit rather than starting a second competing Secret Service. Only the process executable is `oo8-daemon`.

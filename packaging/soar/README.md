@@ -12,7 +12,7 @@ The one-time [Soar declaration](packages.toml) can be **merged into** an existin
 
 ## One-time user service
 
-[oo7-daemon.service](oo7-daemon.service) is a complete **user-level** systemd unit. Once installed at `~/.config/systemd/user/oo7-daemon.service`, it shadows the distribution-provided user unit. It preserves the well-known `org.freedesktop.secrets` D-Bus name and imports the existing `oo7.keyring-encryption-password` systemd user credential. It invokes the fixed Soar symlink path `%h/.local/share/soar/bin/oo7-daemon`. No service rewrite is needed when the executable is updated.
+[oo7-daemon.service](oo7-daemon.service) is a complete **user-level** systemd unit. Once installed at `~/.config/systemd/user/oo7-daemon.service`, it shadows the distribution-provided user unit. It preserves the well-known `org.freedesktop.secrets` D-Bus name and imports the existing `oo7.keyring-encryption-password` systemd user credential. It invokes the fixed Soar symlink path `%h/.local/share/soar/bin/oo8-daemon`. No service rewrite is needed when the executable is updated.
 
 This setup requires a single `systemctl --user daemon-reload` and `systemctl --user enable oo7-daemon.service` after writing the unit. Make the service switch only after verifying the Soar symlink and backing up the encrypted keyrings; preferably activate it at next login rather than restarting a live browser session. A daemon already running stays on its previous binary until the next service restart/login. This is an intentional limitation, not repeated configuration work.
 
@@ -22,10 +22,12 @@ This setup requires a single `systemctl --user daemon-reload` and `systemctl --u
 
 - GitHub CI builds and tests an isolated daemon under a private D-Bus with disposable encrypted keyrings before making a release.
 - Keep encrypted keyring files intact and make a backup before switching the live desktop.
-- Check that `soar` links `oo7-daemon` correctly and that the user unit resolves `ExecStart` before switching services.
+- Check that `soar` links `oo8-daemon` correctly and that the user unit resolves `ExecStart` before switching services.
 - To revert, disable/remove only the new **user-level** unit and restore the distribution unit by reloading the user manager. Keep Soar binaries and encrypted keyrings intact while diagnosing.
 - The packaged binaries are dynamically linked against a compatible Linux userspace; build and test on Arch/EndeavourOS before using elsewhere.
 
 ## Release naming
 
 A version tag `v...` runs the GitHub release workflow. Commits to `main` produce CI artifacts but do not change the installed copy. A release is published only after its packaged standalone daemon passes the isolated D-Bus test. Do not tag a production release until the initial integration testing is complete.
+
+The release archives contain distinct `oo8-*` and `*-oo8` executable names. During daemon-only adoption the `oo7-daemon.service` user override filename remains intentional: it shadows the distribution-provided unit instead of accidentally starting a second Secret Service. The D-Bus service name and stored systemd credential filename remain unchanged.
