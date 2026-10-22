@@ -43,5 +43,6 @@ jobs:
         run: timeout 120s bash tests/oo8-replacement-stress.sh
       - name: Exercise real systemd user service and LoadCredential
         run: |
-          sudo timeout 120s bash tests/oo8-systemd-user.sh \
+          sudo env GITHUB_ACTIONS="$GITHUB_ACTIONS" GITHUB_RUN_ID="$GITHUB_RUN_ID" \
+            timeout 120s bash tests/oo8-systemd-user.sh \
             "$PWD/target/debug/oo7-daemon" "$PWD/target/debug/oo7-cli"
