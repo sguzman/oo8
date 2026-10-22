@@ -133,6 +133,29 @@ impl PamResponse {
     }
 }
 
+/// Write the complete PAM acknowledgment or report why it could not be sent.
+async fn send_pam_response(stream: &mut UnixStream, response: &PamResponse) -> Result<(), Error> {
+    use tokio::io::AsyncWriteExt;
+
+    let bytes = response
+        .to_bytes()
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+
+    tokio::time::timeout(PAM_FRAME_READ_TIMEOUT, async {
+        stream.write_all(&bytes).await?;
+        stream.flush().await
+    })
+    .await
+    .map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "Timed out writing PAM acknowledgment",
+        )
+    })??;
+
+    Ok(())
+}
+
 /// PAM listener that receives authentication secrets from the PAM module
 #[derive(Clone)]
 pub struct PamListener {
@@ -349,14 +372,9 @@ impl PamListener {
             }
         };
 
-        // Send response back to client
-        use tokio::io::AsyncWriteExt;
-        if let Ok(response_bytes) = response.to_bytes() {
-            let _ = stream.write_all(&response_bytes).await;
-            let _ = stream.flush().await;
-        }
-
-        Ok(())
+        // A successful request is not complete until its acknowledgment
+        // has been written; propagate disconnects and serialization errors.
+        send_pam_response(&mut stream, &response).await
     }
 
     /// Replay any secrets buffered before collections were initialized.

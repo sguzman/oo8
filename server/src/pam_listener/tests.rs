@@ -528,3 +528,38 @@ async fn pam_replay_discards_startup_secrets_and_stops_buffering()
     worker.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn pam_acknowledgment_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::io::AsyncReadExt;
+
+    let (mut daemon, mut client) = tokio::net::UnixStream::pair()?;
+    send_pam_response(&mut daemon, &PamResponse::success()).await?;
+
+    let mut header = [0u8; 4];
+    client.read_exact(&mut header).await?;
+    let mut payload = vec![0u8; u32::from_le_bytes(header) as usize];
+    client.read_exact(&mut payload).await?;
+    let response = PamResponse::from_bytes(&payload)?;
+
+    assert!(response.success);
+    assert!(response.error_message.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn pam_acknowledgment_reports_disconnected_client()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (mut daemon, client) = tokio::net::UnixStream::pair()?;
+    drop(client);
+
+    let result = send_pam_response(&mut daemon, &PamResponse::success()).await;
+    assert!(
+        matches!(result, Err(Error::IO(err)) if matches!(
+            err.kind(),
+            std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+        )),
+        "Closed PAM client connection must not be reported as a successful response"
+    );
+    Ok(())
+}
