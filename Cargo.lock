@@ -1144,8 +1144,8 @@ dependencies = [
  "md-5",
  "num",
  "num-bigint-dig",
- "oo8-daemon",
  "oo7-macros",
+ "oo8-daemon",
  "openssl",
  "pbkdf2",
  "serde",
@@ -1159,6 +1159,42 @@ dependencies = [
  "zbus",
  "zeroize",
  "zgvariant",
+]
+
+[[package]]
+name = "oo7-macros"
+version = "0.7.0-alpha"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
+
+[[package]]
+name = "oo7-pam"
+version = "0.7.0-alpha"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_repr",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-journald",
+ "tracing-subscriber",
+ "zeroize",
+ "zgvariant",
+]
+
+[[package]]
+name = "oo7-python"
+version = "0.7.0-alpha"
+dependencies = [
+ "oo7",
+ "pyo3",
+ "pyo3-async-runtimes",
+ "pyo3-build-config",
+ "tokio",
 ]
 
 [[package]]
@@ -1213,31 +1249,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oo7-macros"
-version = "0.7.0-alpha"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.9",
-]
-
-[[package]]
-name = "oo7-pam"
-version = "0.7.0-alpha"
-dependencies = [
- "libc",
- "serde",
- "serde_repr",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-journald",
- "tracing-subscriber",
- "zeroize",
- "zgvariant",
-]
-
-[[package]]
 name = "oo8-portal"
 version = "0.7.0-alpha"
 dependencies = [
@@ -1248,17 +1259,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "zeroize",
-]
-
-[[package]]
-name = "oo7-python"
-version = "0.7.0-alpha"
-dependencies = [
- "oo7",
- "pyo3",
- "pyo3-async-runtimes",
- "pyo3-build-config",
- "tokio",
 ]
 
 [[package]]
