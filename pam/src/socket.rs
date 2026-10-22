@@ -4,7 +4,8 @@ use std::{
         fd::{FromRawFd, RawFd},
         unix::fs::{FileTypeExt, MetadataExt},
     },
-    path::PathBuf,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
     time::Duration,
 };
 
@@ -242,56 +243,44 @@ fn checked_login_helper_secret(secret: &[u8]) -> Result<(), SocketError> {
 ///
 /// The helper holds the secret on a socket until oo7-daemon connects and
 /// retrieves it via memfd.
-fn start_login_helper(secret: &[u8]) -> Result<(), SocketError> {
+fn start_login_helper_with_path(secret: &[u8], path: &Path) -> Result<(), SocketError> {
     checked_login_helper_secret(secret)?;
-    tracing::info!("Starting oo7-daemon-login helper");
+    // Command::spawn reports exec and stdin setup errors to the caller. A
+    // manual fork/dup2/exec path could silently report a successful launch
+    // even when execv failed or stdin redirection was unsuccessful.
+    let mut child = Command::new(path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(SocketError::Connect)?;
 
-    let mut pipe_fds = [0 as libc::c_int; 2];
-    if unsafe { libc::pipe(pipe_fds.as_mut_ptr()) } < 0 {
-        return Err(SocketError::Connect(io::Error::last_os_error()));
-    }
-    let pipe_read = pipe_fds[0];
-    let pipe_write = pipe_fds[1];
+    let Some(mut stdin) = child.stdin.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(SocketError::Connect(io::Error::other(
+            "Login helper stdin pipe unavailable",
+        )));
+    };
 
     let saved_signals = SavedSignals::new();
+    let sent = stdin.write_all(secret);
+    drop(stdin);
+    drop(saved_signals);
 
-    match unsafe { libc::fork() } {
-        -1 => {
-            drop(saved_signals);
-            unsafe {
-                libc::close(pipe_read);
-                libc::close(pipe_write);
-            }
-            Err(SocketError::Connect(io::Error::last_os_error()))
-        }
-        0 => unsafe {
-            libc::close(pipe_write);
-
-            libc::dup2(pipe_read, 0);
-            if pipe_read > 0 {
-                libc::close(pipe_read);
-            }
-
-            let path = std::ffi::CString::new(
-                option_env!("OO7_DAEMON_LOGIN_PATH").unwrap_or("/usr/libexec/oo7-daemon-login"),
-            )
-            .unwrap();
-            let args = [path.as_ptr(), std::ptr::null()];
-            libc::execv(path.as_ptr(), args.as_ptr());
-
-            libc::_exit(1);
-        },
-        child_pid => {
-            unsafe {
-                libc::close(pipe_read);
-            }
-            let sent = send_secret_to_helper_pipe(pipe_write, secret);
-            drop(saved_signals);
-            sent.map_err(SocketError::Send)?;
-            tracing::info!("Started oo7-daemon-login with PID {child_pid}");
-            Ok(())
-        }
+    if let Err(e) = sent {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(SocketError::Send(e));
     }
+
+    tracing::info!("Started oo7-daemon-login with PID {}", child.id());
+    // The helper stays alive only until the daemon fetches its one-shot
+    // secret (or its own timeout expires). Do not block PAM waiting for it.
+    Ok(())
+}
+
+fn start_login_helper(secret: &[u8]) -> Result<(), SocketError> {
+    let path = option_env!("OO7_DAEMON_LOGIN_PATH").unwrap_or("/usr/libexec/oo7-daemon-login");
+    start_login_helper_with_path(secret, Path::new(path))
 }
 
 async fn send_secret_to_daemon_async(
@@ -429,6 +418,18 @@ mod tests {
             Err(SocketError::Send(e)) if e.kind() == io::ErrorKind::InvalidData
         ));
         assert!(checked_login_helper_secret(&vec![2u8; MAX_PAM_FRAME_BYTES]).is_ok());
+    }
+
+    #[test]
+    fn missing_login_helper_executable_is_reported() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("does-not-exist");
+        let result = start_login_helper_with_path(b"test-only-secret", &path);
+        assert!(
+            matches!(result, Err(SocketError::Connect(e)) if e.kind() == io::ErrorKind::NotFound),
+            "A missing helper executable must not be reported as a successful launch"
+        );
+        Ok(())
     }
 
     #[test]
