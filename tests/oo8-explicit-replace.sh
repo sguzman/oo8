@@ -76,7 +76,6 @@ launch primary
 primary_pid="$last_pid"
 primary_owner="$(wait_for_owner_change "" "$primary_pid")"
 [[ -S "$sandbox/pam.sock" ]] || fail "primary PAM listener missing"
-primary_socket="$(stat -Lc '%d:%i' "$sandbox/pam.sock")"
 attr="oo8-replace-test=$(basename "$sandbox")"
 value="oo8-replace-secret"
 printf '%s\n' "$value" | "$cli" store "oo8 replace test" "$attr" \
@@ -112,8 +111,10 @@ primary_pid=""
 # D-Bus service name, and must never erase or replace the secret.
 switched=0
 for _ in {1..150}; do
+    # A freshly bound Unix socket may reuse the old inode. Check the
+    # replacement daemon's own successful bind log instead of inode identity.
     if [[ -S "$sandbox/pam.sock" ]] &&
-        [[ "$(stat -Lc '%d:%i' "$sandbox/pam.sock")" != "$primary_socket" ]]; then
+        grep -Fq "PAM listener started on $sandbox/pam.sock" "$sandbox/replacement.log"; then
         switched=1
         break
     fi
