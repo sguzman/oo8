@@ -58,6 +58,14 @@ jobs:
           runuser -u oo8ci -- bash "$GITHUB_WORKSPACE/tests/oo8-explicit-replace.sh" \
             "$GITHUB_WORKSPACE/target/release/oo7-daemon" \
             "$GITHUB_WORKSPACE/target/release/oo7-cli"
+      - name: Stress repeated replacement with packaged executables
+        env:
+          OO8_REPLACE_ITERATIONS: '6'
+        run: |
+          runuser -u oo8ci -- env OO8_REPLACE_ITERATIONS="$OO8_REPLACE_ITERATIONS" \
+            bash "$GITHUB_WORKSPACE/tests/oo8-replacement-stress.sh" \
+            "$GITHUB_WORKSPACE/target/release/oo7-daemon" \
+            "$GITHUB_WORKSPACE/target/release/oo7-cli"
       - name: Assemble Soar release archive
         run: |
           set -euo pipefail
