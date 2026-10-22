@@ -1,5 +1,5 @@
 [Unit]
-Description=Secret portal service (oo7 implementation)
+Description=Secret portal service (oo8 implementation)
 After=graphical-session.target
 Requisite=graphical-session.target
 PartOf=graphical-session.target

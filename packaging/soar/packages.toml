@@ -6,12 +6,12 @@
 github = "sguzman/oo8"
 asset_pattern = "oo8-x86_64-linux.tar.gz"
 pkg_type = "archive"
-entrypoint = "oo7-daemon"
+entrypoint = "oo8-daemon"
 binaries = [
-  { source = "bin/oo7-daemon", link_as = "oo7-daemon" },
-  { source = "bin/oo7-daemon-login", link_as = "oo7-daemon-login" },
-  { source = "bin/oo7-portal", link_as = "oo7-portal" },
-  { source = "bin/oo7-cli", link_as = "oo7-cli" },
-  { source = "bin/git-credential-oo7", link_as = "git-credential-oo7" },
-  { source = "bin/cargo-credential-oo7", link_as = "cargo-credential-oo7" },
+  { source = "bin/oo8-daemon", link_as = "oo8-daemon" },
+  { source = "bin/oo8-daemon-login", link_as = "oo8-daemon-login" },
+  { source = "bin/oo8-portal", link_as = "oo8-portal" },
+  { source = "bin/oo8-cli", link_as = "oo8-cli" },
+  { source = "bin/git-credential-oo8", link_as = "git-credential-oo8" },
+  { source = "bin/cargo-credential-oo8", link_as = "cargo-credential-oo8" },
 ]

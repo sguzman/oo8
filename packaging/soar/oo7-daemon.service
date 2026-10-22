@@ -8,7 +8,7 @@ Description=Secret Service (oo8, Soar-managed)
 [Service]
 Type=dbus
 BusName=org.freedesktop.secrets
-ExecStart=%h/.local/share/soar/bin/oo7-daemon
+ExecStart=%h/.local/share/soar/bin/oo8-daemon
 Restart=on-failure
 TimeoutStartSec=30s
 TimeoutStopSec=30s

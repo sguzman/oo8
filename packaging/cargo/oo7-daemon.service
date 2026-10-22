@@ -8,7 +8,7 @@ Description=Secret Service (oo8, Cargo-managed)
 [Service]
 Type=dbus
 BusName=org.freedesktop.secrets
-ExecStart=%h/.cargo/bin/oo7-daemon
+ExecStart=%h/.cargo/bin/oo8-daemon
 Restart=on-failure
 TimeoutStartSec=30s
 TimeoutStopSec=30s
