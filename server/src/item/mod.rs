@@ -368,23 +368,30 @@ impl Item {
     ) -> Result<(), ServiceError> {
         let mut inner_guard = self.inner.lock().await;
 
-        if let Some(old_item) = inner_guard.take() {
-            let new_item = match (old_item, locked) {
+        if let Some(old_item) = inner_guard.as_ref() {
+            // Convert a clone first: failure must leave the original item
+            // (including its encrypted contents) in the in-memory collection.
+            let converted = match (old_item, locked) {
                 (oo7::file::Item::Unlocked(unlocked), true) => {
-                    let locked_item = keyring.lock_item(unlocked).await.map_err(|err| {
+                    let locked_item = keyring.lock_item(unlocked.clone()).await.map_err(|err| {
                         custom_service_error(&format!("Failed to lock item: {err}"))
                     })?;
-                    oo7::file::Item::Locked(locked_item)
+                    Some(oo7::file::Item::Locked(locked_item))
                 }
                 (oo7::file::Item::Locked(locked_item), false) => {
-                    let unlocked = keyring.unlock_item(locked_item).await.map_err(|err| {
-                        custom_service_error(&format!("Failed to unlock item: {err}"))
-                    })?;
-                    oo7::file::Item::Unlocked(unlocked)
+                    let unlocked = keyring
+                        .unlock_item(locked_item.clone())
+                        .await
+                        .map_err(|err| {
+                            custom_service_error(&format!("Failed to unlock item: {err}"))
+                        })?;
+                    Some(oo7::file::Item::Unlocked(unlocked))
                 }
-                (other, _) => other,
+                _ => None,
             };
-            *inner_guard = Some(new_item);
+            if let Some(new_item) = converted {
+                *inner_guard = Some(new_item);
+            }
         }
 
         drop(inner_guard);

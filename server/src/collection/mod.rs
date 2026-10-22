@@ -588,17 +588,19 @@ impl Collection {
             }
         }
 
+        // When locking, transform items before consuming the unlocked
+        // keyring. Failed conversion must not erase the collection's keyring.
+        if locked && let Some(Keyring::Unlocked(unlocked)) = keyring_guard.as_ref() {
+            let items = self.items.lock().await;
+            for item in items.iter() {
+                item.set_locked(true, unlocked).await?;
+            }
+        }
+        let unlocking = !locked && matches!(keyring_guard.as_ref(), Some(Keyring::Locked(_)));
+
         if let Some(old_keyring) = keyring_guard.take() {
             let new_keyring = match (old_keyring, locked) {
-                (Keyring::Unlocked(unlocked), true) => {
-                    let items = self.items.lock().await;
-                    for item in items.iter() {
-                        item.set_locked(locked, &unlocked).await?;
-                    }
-                    drop(items);
-
-                    Keyring::Locked(unlocked.lock())
-                }
+                (Keyring::Unlocked(unlocked), true) => Keyring::Locked(unlocked.lock()),
                 (Keyring::Locked(locked_kr), false) => {
                     let keyring_path = locked_kr.path().map(|p| p.to_path_buf());
 
@@ -624,17 +626,21 @@ impl Collection {
                         }
                     };
 
-                    let items = self.items.lock().await;
-                    for item in items.iter() {
-                        item.set_locked(locked, &unlocked).await?;
-                    }
-                    drop(items);
-
                     Keyring::Unlocked(unlocked)
                 }
                 (other, _) => other,
             };
             *keyring_guard = Some(new_keyring);
+        }
+
+        // An unlock may have succeeded even if decrypting an individual
+        // item fails. Keep the newly unlocked keyring in the collection
+        // instead of dropping it through a premature return.
+        if unlocking && let Some(Keyring::Unlocked(unlocked)) = keyring_guard.as_ref() {
+            let items = self.items.lock().await;
+            for item in items.iter() {
+                item.set_locked(false, unlocked).await?;
+            }
         }
 
         drop(keyring_guard);
