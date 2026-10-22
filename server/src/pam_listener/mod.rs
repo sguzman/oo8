@@ -139,7 +139,8 @@ pub struct PamListener {
     pub(crate) socket_path: PathBuf,
     service: Service,
     /// Current user's secret, used to unlock their keyring <username, secret>
-    user_secrets: Arc<RwLock<std::collections::HashMap<String, Secret>>>,
+    // Some while startup is pending; None after the one-time replay.
+    user_secrets: Arc<RwLock<Option<std::collections::HashMap<String, Secret>>>>,
 }
 
 impl PamListener {
@@ -153,7 +154,7 @@ impl PamListener {
         Self {
             socket_path,
             service,
-            user_secrets: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            user_secrets: Arc::new(RwLock::new(Some(std::collections::HashMap::new()))),
         }
     }
 
@@ -284,10 +285,9 @@ impl PamListener {
                 );
 
                 let secret = Secret::from(message.new_secret.to_vec());
-                self.user_secrets
-                    .write()
-                    .await
-                    .insert(message.username.clone(), secret.clone());
+                if let Some(buffered) = self.user_secrets.write().await.as_mut() {
+                    buffered.insert(message.username.clone(), secret.clone());
+                }
 
                 match self.try_unlock_collections(&secret).await {
                     Ok(_) => {
@@ -332,10 +332,9 @@ impl PamListener {
                             message.username
                         );
                         // Update stored secret
-                        self.user_secrets
-                            .write()
-                            .await
-                            .insert(message.username.clone(), new_secret);
+                        if let Some(buffered) = self.user_secrets.write().await.as_mut() {
+                            buffered.insert(message.username.clone(), new_secret);
+                        }
                         PamResponse::success()
                     }
                     Err(e) => {
@@ -362,7 +361,10 @@ impl PamListener {
 
     /// Replay any secrets buffered before collections were initialized.
     pub async fn replay_buffered_secrets(&self) {
-        let secrets = self.user_secrets.read().await;
+        // End buffering atomically and drain the startup credentials. New
+        // requests unlock keyrings directly and must not retain passwords.
+        // Do not hold the lock across the potentially slow replay.
+        let secrets = self.user_secrets.write().await.take().unwrap_or_default();
         if secrets.is_empty() {
             return;
         }

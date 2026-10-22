@@ -476,3 +476,55 @@ async fn pam_connection_limit_rejects_overflow_and_recovers()
     worker.abort();
     Ok(())
 }
+
+#[tokio::test]
+async fn pam_replay_discards_startup_secrets_and_stops_buffering()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tokio::time::{Duration, sleep, timeout};
+
+    let dir = tempfile::tempdir()?;
+    let socket_path = dir.path().join("replay-pam.sock");
+    let setup = crate::tests::TestServiceSetup::with_disk_keyrings(
+        dir.path().to_path_buf(),
+        Some(socket_path.clone()),
+        None,
+    )
+    .await?;
+    let listener = PamListener::new(setup.server.clone());
+
+    {
+        let mut buffered = listener.user_secrets.write().await;
+        buffered
+            .as_mut()
+            .expect("Buffering should be enabled at startup")
+            .insert("early".to_owned(), Secret::text("early-password"));
+    }
+
+    listener.replay_buffered_secrets().await;
+    assert!(
+        listener.user_secrets.read().await.is_none(),
+        "Startup secret buffer must be dropped after replay"
+    );
+
+    // A later successful request must not recreate the password cache.
+    let server = listener.clone();
+    let worker = tokio::spawn(async move {
+        let _ = server.start().await;
+    });
+    timeout(Duration::from_secs(2), async {
+        while !socket_path.exists() {
+            sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await?;
+
+    let frame = create_pam_message(PamOperation::Unlock, "late", &[], b"late-password");
+    send_pam_message(&socket_path, &frame).await?;
+    assert!(
+        listener.user_secrets.read().await.is_none(),
+        "A post-startup request must not retain its password"
+    );
+
+    worker.abort();
+    Ok(())
+}
