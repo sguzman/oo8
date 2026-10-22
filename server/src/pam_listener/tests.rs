@@ -590,12 +590,18 @@ async fn pam_rejects_wrong_unlock_and_accepts_correct_retry()
     let listener = PamListener::new(setup.server.clone());
     let wrong = Secret::from("wrong-unlock-password");
     let result = listener.try_unlock_collections(&wrong).await;
-    assert!(result.is_err(), "Wrong unlock password must not report success");
+    assert!(
+        result.is_err(),
+        "Wrong unlock password must not report success"
+    );
     {
         let collections = setup.server.collections.lock().await;
         for collection in collections.values() {
             if collection.label().await == "Work" {
-                assert!(collection.is_locked().await, "Wrong password unlocked collection");
+                assert!(
+                    collection.is_locked().await,
+                    "Wrong password unlocked collection"
+                );
             }
         }
     }
@@ -631,7 +637,10 @@ async fn pam_rejects_wrong_unlock_and_accepts_correct_retry()
         for collection in collections.values() {
             if collection.label().await == "Work" {
                 found = true;
-                assert!(!collection.is_locked().await, "Correct password did not unlock");
+                assert!(
+                    !collection.is_locked().await,
+                    "Correct password did not unlock"
+                );
             }
         }
         assert!(found, "Test collection missing");
@@ -673,20 +682,33 @@ async fn pam_wrong_old_password_rejected_without_changing_keyring()
         let collections = setup.server.collections.lock().await;
         for collection in collections.values() {
             if collection.label().await == "Work" {
-                assert!(collection.is_locked().await, "Failure changed the lock state");
+                assert!(
+                    collection.is_locked().await,
+                    "Failure changed the lock state"
+                );
             }
         }
     }
 
-    listener.change_collection_passwords(&original, &changed).await?;
+    listener
+        .change_collection_passwords(&original, &changed)
+        .await?;
     {
         let collections = setup.server.collections.lock().await;
         let mut found = false;
         for collection in collections.values() {
             if collection.label().await == "Work" {
                 found = true;
-                assert!(collection.is_locked().await, "Password change left collection unlocked");
-                assert!(collection.set_locked(false, Some(original.clone())).await.is_err());
+                assert!(
+                    collection.is_locked().await,
+                    "Password change left collection unlocked"
+                );
+                assert!(
+                    collection
+                        .set_locked(false, Some(original.clone()))
+                        .await
+                        .is_err()
+                );
                 collection.set_locked(false, Some(changed.clone())).await?;
             }
         }
@@ -712,6 +734,9 @@ async fn pam_password_change_with_no_persistent_keyrings_is_not_success()
             &Secret::from("next-password"),
         )
         .await;
-    assert!(result.is_err(), "A zero-keyring change must not report success");
+    assert!(
+        result.is_err(),
+        "A zero-keyring change must not report success"
+    );
     Ok(())
 }
