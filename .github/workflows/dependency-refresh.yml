@@ -34,6 +34,9 @@ jobs:
         run: |
           set -euo pipefail
           cargo update
+          # Avoid Tokio 1.54.0 (RUSTSEC-2026-0384). The 1.53 LTS
+          # line predates the buggy timer-driver change.
+          cargo update -p tokio --precise 1.53.3
           # The currently locked inout 0.2.3 was yanked. Pin to the
           # last non-yanked compatible 0.2.x patch until RustCrypto
           # publishes a replacement.
@@ -44,6 +47,9 @@ jobs:
           set -euo pipefail
           cargo check --workspace --locked
           cargo test -p oo7-daemon --locked
+
+      - name: Audit updated lockfile before committing
+        uses: EmbarkStudios/cargo-deny-action@v2
 
       - name: Commit tested lockfile update directly to main
         run: |
