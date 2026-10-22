@@ -444,7 +444,10 @@ mod tests {
             };
             let context = zgvariant::serialized::Context::new(zgvariant::LE, 0);
             let bytes = zgvariant::to_bytes(context, &reply).unwrap().to_vec();
-            stream.write_all(&(bytes.len() as u32).to_le_bytes()).await.unwrap();
+            stream
+                .write_all(&(bytes.len() as u32).to_le_bytes())
+                .await
+                .unwrap();
             stream.write_all(&bytes).await.unwrap();
         });
         let uid = unsafe { libc::getuid() };
