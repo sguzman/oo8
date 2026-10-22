@@ -28,31 +28,20 @@ pub static SOCKET_PATH: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 
 #[cfg(target_os = "linux")]
-fn remove_stale_login_socket(path: &Path) -> io::Result<()> {
+fn ensure_login_socket_vacant(path: &Path) -> io::Result<()> {
+    // This is a one-shot secret-delivery socket. Connecting to determine
+    // whether it is active would consume the pending connection and could
+    // discard the first helper's credential. Never probe it with connect().
+    // A leftover socket from a crashed helper must be cleaned up separately.
     match std::fs::symlink_metadata(path) {
-        Ok(meta) if !meta.file_type().is_socket() => Err(io::Error::new(
+        Ok(meta) if meta.file_type().is_socket() => Err(io::Error::new(
+            io::ErrorKind::AddrInUse,
+            "Login helper socket already exists; refusing to consume its one-shot connection",
+        )),
+        Ok(_) => Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
             "Existing login-helper path is not a Unix socket",
         )),
-        Ok(_) => match std::os::unix::net::UnixStream::connect(path) {
-            Ok(_) => Err(io::Error::new(
-                io::ErrorKind::AddrInUse,
-                "Another login helper is already listening",
-            )),
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    io::ErrorKind::ConnectionRefused | io::ErrorKind::NotFound
-                ) =>
-            {
-                match std::fs::remove_file(path) {
-                    Ok(()) => Ok(()),
-                    Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-                    Err(e) => Err(e),
-                }
-            }
-            Err(e) => Err(e),
-        },
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e),
     }
@@ -97,9 +86,9 @@ fn main() {
 
     let socket_path = &*SOCKET_PATH;
 
-    // Never unlink an existing live helper's socket. Two login attempts may
-    // overlap; the later one must not disconnect the first one's secret.
-    remove_stale_login_socket(socket_path).unwrap_or_else(|e| {
+    // Refuse to probe or unlink another helper's one-shot socket. Two
+    // overlapping login attempts must not consume or disconnect each other.
+    ensure_login_socket_vacant(socket_path).unwrap_or_else(|e| {
         tracing::error!(
             "Cannot prepare login helper socket {}: {e}",
             socket_path.display()
@@ -233,23 +222,34 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let path = temp.path().join("login.sock");
         let listener = std::os::unix::net::UnixListener::bind(&path)?;
-        let result = remove_stale_login_socket(&path);
+        let result = ensure_login_socket_vacant(&path);
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::AddrInUse);
         assert!(path.exists(), "Active helper socket was removed");
-        let _client = std::os::unix::net::UnixStream::connect(&path)?;
+        listener.set_nonblocking(true)?;
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            io::ErrorKind::WouldBlock,
+            "Checking for an active helper consumed its one-shot connection"
+        );
         drop(listener);
         Ok(())
     }
 
     #[test]
-    fn stale_login_helper_socket_is_cleaned() -> io::Result<()> {
+    fn stale_login_helper_socket_is_preserved() -> io::Result<()> {
         let temp = tempfile::tempdir()?;
         let path = temp.path().join("stale.sock");
         let listener = std::os::unix::net::UnixListener::bind(&path)?;
         drop(listener);
         assert!(path.exists());
-        remove_stale_login_socket(&path)?;
-        assert!(!path.exists(), "Stale helper socket was not removed");
+        assert_eq!(
+            ensure_login_socket_vacant(&path).unwrap_err().kind(),
+            io::ErrorKind::AddrInUse
+        );
+        assert!(
+            path.exists(),
+            "Conservative validation must not remove an existing socket"
+        );
         Ok(())
     }
 
@@ -283,7 +283,7 @@ mod tests {
         let path = temp.path().join("protected.txt");
         std::fs::write(&path, b"leave this test file intact")?;
         assert_eq!(
-            remove_stale_login_socket(&path).unwrap_err().kind(),
+            ensure_login_socket_vacant(&path).unwrap_err().kind(),
             io::ErrorKind::AlreadyExists
         );
         assert_eq!(std::fs::read(&path)?, b"leave this test file intact");
