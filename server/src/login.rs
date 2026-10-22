@@ -2,7 +2,10 @@
 use std::{
     io::{self, IoSlice, Read},
     mem::MaybeUninit,
-    os::{fd::AsFd, unix::fs::{FileTypeExt, PermissionsExt}},
+    os::{
+        fd::AsFd,
+        unix::fs::{FileTypeExt, PermissionsExt},
+    },
     path::{Path, PathBuf},
     sync::LazyLock,
 };
@@ -97,7 +100,10 @@ fn main() {
     // Never unlink an existing live helper's socket. Two login attempts may
     // overlap; the later one must not disconnect the first one's secret.
     remove_stale_login_socket(socket_path).unwrap_or_else(|e| {
-        tracing::error!("Cannot prepare login helper socket {}: {e}", socket_path.display());
+        tracing::error!(
+            "Cannot prepare login helper socket {}: {e}",
+            socket_path.display()
+        );
         std::process::exit(1);
     });
 

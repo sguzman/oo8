@@ -599,7 +599,13 @@ async fn item_decryption_failure_preserves_unlocked_collection()
     let default_collection = setup.default_collection().await?;
     let secret = setup.create_dbus_secret("disposable-secret")?;
     let item = default_collection
-        .create_item("Mixed Key Item", &[("app", "mixed-keys")], &secret, false, None)
+        .create_item(
+            "Mixed Key Item",
+            &[("app", "mixed-keys")],
+            &secret,
+            false,
+            None,
+        )
         .await?;
 
     let collection = {
