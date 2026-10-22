@@ -1,4 +1,5 @@
 [package]
+autobins = false
 name = "cargo-credential-oo7"
 description = "Cargo credential provider using oo7"
 version.workspace = true
@@ -11,6 +12,10 @@ homepage.workspace = true
 license.workspace = true
 rust-version.workspace = true
 exclude.workspace = true
+
+[[bin]]
+name = "cargo-credential-oo8"
+path = "src/main.rs"
 
 [dependencies]
 cargo-credential = "0.4"

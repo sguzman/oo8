@@ -1,4 +1,5 @@
 [package]
+autobins = false
 name = "oo7-daemon"
 authors = ["Bilal Elmoussaoui", "Dhanuka Warusadura"]
 description = "Server side implementation of the freedesktop Secret Service"
@@ -11,11 +12,11 @@ rust-version.workspace = true
 version.workspace = true
 
 [[bin]]
-name = "oo7-daemon"
+name = "oo8-daemon"
 path = "src/main.rs"
 
 [[bin]]
-name = "oo7-daemon-login"
+name = "oo8-daemon-login"
 path = "src/login.rs"
 
 [lib]

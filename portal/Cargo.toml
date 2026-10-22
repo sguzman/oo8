@@ -1,4 +1,5 @@
 [package]
+autobins = false
 name = "oo7-portal"
 authors.workspace = true
 categories.workspace = true
@@ -11,6 +12,10 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 description = "Secret portal implementation using oo7"
+
+[[bin]]
+name = "oo8-portal"
+path = "src/main.rs"
 
 [dependencies]
 ashpd = {workspace = true, features = ["backend", "secret", "tracing"]}

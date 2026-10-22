@@ -1,4 +1,5 @@
 [package]
+autobins = false
 name = "oo7-cli"
 description = "System keyring access from the terminal"
 authors.workspace = true
@@ -11,6 +12,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
+
+[[bin]]
+name = "oo8-cli"
+path = "src/main.rs"
 
 [dependencies]
 anstyle = "1.0"
