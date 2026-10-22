@@ -1,9 +1,6 @@
 use std::{
     io::{self, Write},
-    os::{
-        fd::{FromRawFd, RawFd},
-        unix::fs::{FileTypeExt, MetadataExt},
-    },
+    os::unix::fs::{FileTypeExt, MetadataExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::Duration,
@@ -220,14 +217,6 @@ pub fn send_secret_to_daemon(
     }
 }
 
-// Take ownership of the descriptor so it is always closed, including after
-// an interrupted write or a receiver that closes early. write_all retries
-// short writes and EINTR and reports EPIPE rather than silently truncating.
-fn send_secret_to_helper_pipe(write_fd: RawFd, secret: &[u8]) -> io::Result<()> {
-    let mut writer = unsafe { std::fs::File::from_raw_fd(write_fd) };
-    writer.write_all(secret)
-}
-
 // Auto-start must enforce the same limit as the helper's stdin reader.
 fn checked_login_helper_secret(secret: &[u8]) -> Result<(), SocketError> {
     if secret.is_empty() || secret.len() > MAX_PAM_FRAME_BYTES {
@@ -429,24 +418,6 @@ mod tests {
             matches!(result, Err(SocketError::Connect(e)) if e.kind() == io::ErrorKind::NotFound),
             "A missing helper executable must not be reported as a successful launch"
         );
-        Ok(())
-    }
-
-    #[test]
-    fn helper_pipe_receives_complete_secret() -> Result<(), Box<dyn std::error::Error>> {
-        use io::Read;
-
-        let mut descriptors = [0; 2];
-        if unsafe { libc::pipe(descriptors.as_mut_ptr()) } != 0 {
-            return Err(io::Error::last_os_error().into());
-        }
-        let secret = b"disposable-helper-credential";
-        send_secret_to_helper_pipe(descriptors[1], secret)?;
-
-        let mut reader = unsafe { std::fs::File::from_raw_fd(descriptors[0]) };
-        let mut transferred = Vec::new();
-        reader.read_to_end(&mut transferred)?;
-        assert_eq!(transferred, secret);
         Ok(())
     }
 
