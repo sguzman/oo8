@@ -399,31 +399,53 @@ impl PamListener {
     }
 
     async fn try_unlock_collections(&self, secret: &Secret) -> Result<(), Error> {
-        // First, try to migrate any pending v0 keyrings
+        // A wrong credential must not be acknowledged as a successful unlock.
+        // Pending migrations are also credential-bearing keyrings and count
+        // as incomplete when none of the provided secrets can open them.
+        let pending_before = self.service.pending_migrations.lock().await.len();
         let migrated = self.service.migrate_pending_keyrings(secret).await;
         if !migrated.is_empty() {
             tracing::info!("Migrated {} v0 keyring(s): {:?}", migrated.len(), migrated);
         }
 
         let collections = self.service.collections.lock().await;
+        let mut unlocked = 0;
+        let mut failed_unlocks = 0;
 
         for collection in collections.values() {
             if collection.is_locked().await {
                 tracing::debug!("Attempting to unlock collection: {}", collection.path());
 
-                // Try to unlock with the provided secret
-                if let Err(e) = collection.set_locked(false, Some(secret.clone())).await {
-                    tracing::debug!("Failed to unlock collection {}: {}", collection.path(), e);
-                } else {
-                    tracing::info!("Unlocked collection: {}", collection.path());
+                match collection.set_locked(false, Some(secret.clone())).await {
+                    Ok(()) => {
+                        unlocked += 1;
+                        tracing::info!("Unlocked collection: {}", collection.path());
+                    }
+                    Err(e) => {
+                        failed_unlocks += 1;
+                        tracing::warn!("Failed to unlock collection {}: {}", collection.path(), e);
+                    }
                 }
             }
         }
 
+        let failed_migrations = pending_before.saturating_sub(migrated.len());
+        if failed_unlocks > 0 || failed_migrations > 0 {
+            // A partial success is not an all-clear: the PAM client can now
+            // distinguish a completely unlocked keyring from a partial state.
+            return Err(std::io::Error::other(format!(
+                "PAM unlock incomplete: {unlocked} collection(s) unlocked,                  {failed_unlocks} collection(s) failed,                  {failed_migrations} pending migration(s) unresolved"
+            ))
+            .into());
+        }
+
+        // No locked collections is an idempotent success, including early PAM
+        // requests buffered before collections have been discovered.
         Ok(())
     }
 
-    /// Change password for all collections that match the old password
+    /// Change passwords for all matching persistent collections. Restore the
+    /// previous lock state on every path, including validation/write errors.
     async fn change_collection_passwords(
         &self,
         old_secret: &Secret,
@@ -431,98 +453,88 @@ impl PamListener {
     ) -> Result<usize, Error> {
         let collections = self.service.collections.lock().await;
         let mut changed_count = 0;
+        let mut failed_count = 0;
 
         for (path, collection) in collections.iter() {
-            // Skip session collection (it's temporary and doesn't persist)
+            // The ephemeral session collection has no persistent password.
             if collection.alias().await == oo7::dbus::Service::SESSION_COLLECTION {
-                tracing::debug!("Skipping session collection: {}", path);
                 continue;
             }
 
-            // Get the keyring from the collection
             let keyring_guard = collection.keyring.read().await;
             let Some(keyring) = keyring_guard.as_ref() else {
                 tracing::debug!("Collection {} has no keyring", path);
                 continue;
             };
-
-            // Track if we unlocked the collection (so we can re-lock it after)
             let was_locked = keyring.is_locked();
+            drop(keyring_guard);
 
-            // Check if the keyring is locked and unlock if needed
             if was_locked {
-                // Try to unlock with old password first
-                tracing::debug!(
-                    "Collection {} is locked, attempting to unlock with old password",
-                    path
-                );
-                drop(keyring_guard);
-
                 if let Err(e) = collection.set_locked(false, Some(old_secret.clone())).await {
                     tracing::warn!(
                         "Failed to unlock collection {} with old password: {}",
                         path,
                         e
                     );
+                    failed_count += 1;
                     continue;
                 }
-            } else {
-                drop(keyring_guard);
             }
 
-            // Re-acquire the lock to get the unlocked keyring
-            let keyring_guard = collection.keyring.read().await;
-            let Some(oo7::file::Keyring::Unlocked(uk)) = keyring_guard.as_ref() else {
-                tracing::warn!("Collection {} is not unlocked", path);
-                continue;
-            };
+            // Re-locking must happen after this scope, even if password
+            // validation or changing the keyring fails.
+            let change_result: Result<(), Error> = async {
+                let keyring_guard = collection.keyring.read().await;
+                let Some(oo7::file::Keyring::Unlocked(keyring)) = keyring_guard.as_ref() else {
+                    return Err(std::io::Error::other("Collection is not unlocked").into());
+                };
 
-            // Validate that the old password can decrypt items in the keyring
-            let can_decrypt = match uk.validate_secret(old_secret).await {
-                Ok(valid) => valid,
+                if !keyring.validate_secret(old_secret).await? {
+                    return Err(std::io::Error::other(
+                        "Old password does not match keyring password",
+                    )
+                    .into());
+                }
+
+                keyring.change_secret(new_secret.clone()).await?;
+                Ok(())
+            }
+            .await;
+
+            match change_result {
+                Ok(()) => {
+                    changed_count += 1;
+                    tracing::info!("Changed password for collection: {}", path);
+                }
                 Err(e) => {
+                    failed_count += 1;
+                    tracing::warn!("Failed to change password for collection {}: {}", path, e);
+                }
+            }
+
+            if was_locked {
+                if let Err(e) = collection.set_locked(true, None).await {
+                    failed_count += 1;
                     tracing::warn!(
-                        "Failed to validate old password for collection {}: {}",
+                        "Failed to restore lock state for collection {}: {}",
                         path,
                         e
                     );
-                    continue;
-                }
-            };
-
-            if !can_decrypt {
-                tracing::debug!(
-                    "Old password does not match keyring {} password, skipping",
-                    path
-                );
-                continue;
-            }
-
-            // Change the keyring password
-            match uk.change_secret(new_secret.clone()).await {
-                Ok(_) => {
-                    tracing::info!("Successfully changed password for collection: {}", path);
-                    changed_count += 1;
-
-                    // Re-lock the collection if it was locked before we
-                    // unlocked it
-                    drop(keyring_guard);
-                    if was_locked {
-                        if let Err(e) = collection.set_locked(true, None).await {
-                            tracing::warn!(
-                                "Failed to re-lock collection {} after password change: {}",
-                                path,
-                                e
-                            );
-                        } else {
-                            tracing::debug!("Re-locked collection: {}", path);
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("Failed to change password for collection {}: {}", path, e);
                 }
             }
+        }
+
+        if failed_count > 0 {
+            return Err(std::io::Error::other(format!(
+                "PAM password change incomplete: {changed_count} collection(s) changed,                  {failed_count} operation(s) failed"
+            ))
+            .into());
+        }
+        if changed_count == 0 {
+            return Err(std::io::Error::other(
+                "PAM password change did not update any persistent keyrings",
+            )
+            .into());
         }
 
         Ok(changed_count)

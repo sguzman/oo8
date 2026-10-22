@@ -563,3 +563,139 @@ async fn pam_acknowledgment_reports_disconnected_client() -> Result<(), Box<dyn 
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn pam_rejects_wrong_unlock_and_accepts_correct_retry()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    let correct = Secret::from("correct-unlock-password");
+    let keyring = UnlockedKeyring::open_at(temp.path(), "work", Some(correct.clone())).await?;
+    keyring
+        .create_item(
+            "Work Item",
+            &[("type", "work")],
+            Secret::text("disposable-secret"),
+            false,
+        )
+        .await?;
+    keyring.write().await?;
+
+    let socket = temp.path().join("pam-unlock-rejection.sock");
+    let setup = crate::tests::TestServiceSetup::with_disk_keyrings(
+        temp.path().to_path_buf(),
+        Some(socket.clone()),
+        None,
+    )
+    .await?;
+    let listener = PamListener::new(setup.server.clone());
+    let work = {
+        let collections = setup.server.collections.lock().await;
+        collections
+            .values()
+            .find(|_| false)
+            .cloned()
+    };
+    drop(work);
+    let wrong = Secret::from("wrong-unlock-password");
+    let result = listener.try_unlock_collections(&wrong).await;
+    assert!(result.is_err(), "Wrong unlock password must not report success");
+    {
+        let collections = setup.server.collections.lock().await;
+        for collection in collections.values() {
+            if collection.label().await == "Work" {
+                assert!(collection.is_locked().await, "Wrong password unlocked collection");
+            }
+        }
+    }
+
+    listener.try_unlock_collections(&correct).await?;
+    {
+        let collections = setup.server.collections.lock().await;
+        let mut found = false;
+        for collection in collections.values() {
+            if collection.label().await == "Work" {
+                found = true;
+                assert!(!collection.is_locked().await, "Correct password did not unlock");
+            }
+        }
+        assert!(found, "Test collection missing");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn pam_wrong_old_password_rejected_without_changing_keyring()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    let original = Secret::from("old-test-password");
+    let changed = Secret::from("new-test-password");
+    let keyring = UnlockedKeyring::open_at(temp.path(), "work", Some(original.clone())).await?;
+    keyring
+        .create_item(
+            "Work Item",
+            &[("type", "work")],
+            Secret::text("disposable-secret"),
+            false,
+        )
+        .await?;
+    keyring.write().await?;
+
+    let setup = crate::tests::TestServiceSetup::with_disk_keyrings(
+        temp.path().to_path_buf(),
+        Some(temp.path().join("pam-password-rejection.sock")),
+        None,
+    )
+    .await?;
+    let listener = PamListener::new(setup.server.clone());
+
+    let bad = listener
+        .change_collection_passwords(&Secret::from("incorrect-old"), &changed)
+        .await;
+    assert!(bad.is_err(), "Wrong old password must not report success");
+
+    {
+        let collections = setup.server.collections.lock().await;
+        for collection in collections.values() {
+            if collection.label().await == "Work" {
+                assert!(collection.is_locked().await, "Failure changed the lock state");
+            }
+        }
+    }
+
+    listener.change_collection_passwords(&original, &changed).await?;
+    {
+        let collections = setup.server.collections.lock().await;
+        let mut found = false;
+        for collection in collections.values() {
+            if collection.label().await == "Work" {
+                found = true;
+                assert!(collection.is_locked().await, "Password change left collection unlocked");
+                assert!(collection.set_locked(false, Some(original.clone())).await.is_err());
+                collection.set_locked(false, Some(changed.clone())).await?;
+            }
+        }
+        assert!(found, "Test collection missing");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn pam_password_change_with_no_persistent_keyrings_is_not_success()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    let setup = crate::tests::TestServiceSetup::with_disk_keyrings(
+        temp.path().to_path_buf(),
+        Some(temp.path().join("pam-no-keyrings.sock")),
+        None,
+    )
+    .await?;
+    let listener = PamListener::new(setup.server.clone());
+    let result = listener
+        .change_collection_passwords(
+            &Secret::from("previous-password"),
+            &Secret::from("next-password"),
+        )
+        .await;
+    assert!(result.is_err(), "A zero-keyring change must not report success");
+    Ok(())
+}
